@@ -442,6 +442,9 @@ function newSessionId(){
   return dev+'_'+Date.now();
 }
 function fbDocId(){if(!S||!S.profile)return '';const m=(S.profile.mobile||'').trim();if(!m)return S.id;return (ALL.kids.indexOf(S)<=0)?m:(m+'_'+S.id);}
+function logAuthAlert(type,contact,detail){
+  try{if(_db)_db.collection('authAlerts').add({type,contact:String(contact||''),detail:String(detail||''),ts:Date.now()}).catch(()=>{});}catch(e){}
+}
 function claimActiveSession(){
   if(!S||!S.profile)return;
   const sid=newSessionId();
@@ -880,8 +883,11 @@ function viewLogin(){
   const err=ui.loginErr?`<p class="err" role="alert">${esc(ui.loginErr)}</p>`:'';
   if(ui.loginStep===1){
     if(ui.loginStep===2){
-      return `<div class="card clean-card" style="display:flex;flex-direction:column;gap:10px;margin-block:auto">
-       <div style="text-align:center"><h2>Reset 4-Digit PIN</h2><p class="muted small">Verified Google: <b style="color:var(--good)">${esc(ui.fpVerifiedEmail||'')}</b> ✓</p></div>
+      const isMob=/^\d{10}$/.test((ui.loginMob||'').trim());
+      return `<div class="card clean-card" style="display:flex;flex-direction:column;gap:8px;margin-block:auto">
+       <div style="text-align:center"><h2>Reset 4-Digit PIN</h2><p class="muted small">Account: <b>${esc(ui.loginMob)}</b></p></div>
+       <div class="field"><label for="f-fpc">${isMob?'Registered Email daalein *':'Registered 10-digit Mobile daalein *'}</label><input id="f-fpc" data-f="fpCheck" type="${isMob?'email':'tel'}" value="${esc(ui.fpCheck||'')}" placeholder="${isMob?'student@gmail.com':'10-digit mobile'}"></div>
+       <div class="field"><label for="f-fpcls">Apni Registered Class chunein *</label><select id="f-fpcls" data-f="fpCls"><option value="">Select Class</option>${[6,7,8,9,10,11,12].map(c=>`<option value="${c}" ${String(ui.fpCls||'')===String(c)?'selected':''}>Class ${c}</option>`).join('')}</select></div>
        <div class="field"><label for="f-fpp">Naya 4-Digit PIN *</label><input id="f-fpp" data-f="fpPin" type="password" inputmode="numeric" maxlength="4" value="${esc(ui.fpPin||'')}" placeholder="••••"></div>
        ${err}
        <button class="btn block" data-act="resetpin">Save New PIN &amp; Login ›</button>
@@ -890,7 +896,7 @@ function viewLogin(){
     }
     return `<div class="card clean-card" style="display:flex;flex-direction:column;gap:11px;margin-block:auto">
      <div style="text-align:center"><h2>Enter 4-Digit PIN</h2><p class="muted small">Account: <b>${esc(ui.loginMob)}</b></p></div>
-     <div class="field"><label for="f-lotp">4-Digit PIN</label><input id="f-lotp" data-f="loginOtp" type="password" inputmode="numeric" maxlength="4" value="${esc(ui.loginOtp)}" placeholder="••••"></div>
+     ${ui.fpSentMsg?`<div class="ok-note" style="font-size:.82rem">${esc(ui.fpSentMsg)}</div>`:""}<div class="field"><label for="f-lotp">4-Digit PIN (ya Reset Password)</label><input id="f-lotp" data-f="loginOtp" type="password" maxlength="20" value="${esc(ui.loginOtp)}" placeholder="••••"></div>
      ${err}
      <button class="btn block" data-act="verifylogin">Login ›</button>
      <div style="display:flex;justify-content:space-between;gap:8px"><button class="link" data-act="loginback">‹ Change Mobile / Email</button><button class="link" data-act="forgotpin">Forgot PIN?</button></div>
@@ -1869,7 +1875,9 @@ document.addEventListener('click',e=>{
     ALL.parent=S.consent;
     if(ui.loggedOut){const nk=blankKid('k'+Date.now());ALL.kids.push(nk);S=nk;ALL.active=S.id;ui.loggedOut=false;}
     S.profile={name:ob.name.trim(),mobile:(ob.mobile||'').trim(),email:(ob.email||'').trim().toLowerCase(),pin:((ob.pin||'').trim()||(S.profile&&S.profile.pin)||''),board:ob.board,cls:+ob.cls,dist:ob.dist,block:ob.block,sid,schoolName};
-    save();syncToServer(true);claimActiveSession();ui.edit=false;ui.subj=null;ui.open=null;ui.picked={};ui.test=null;
+    save();syncToServer(true);claimActiveSession();
+    try{if(typeof firebase!=='undefined'&&firebase.auth&&S.profile.email&&S.profile.pin){firebase.auth().createUserWithEmailAndPassword(S.profile.email,'gj'+S.profile.pin).catch(()=>{});}}catch(ex){}
+    ui.edit=false;ui.subj=null;ui.open=null;ui.picked={};ui.test=null;
     return goTab('home');
   }
   if(a==='authmode'){ui.authMode=v;ui.loginErr='';ui.loginStep=0;return render()}
@@ -1883,39 +1891,40 @@ document.addEventListener('click',e=>{
   if(a==='forgotpin'){
     const m=(ui.loginMob||'').trim(), ml=m.toLowerCase();
     const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email.toLowerCase()===ml)));
-    if(!found||!found.profile.email){ui.loginErr='Is account mein Gmail link nahi hai.';return render();}
-    if(typeof firebase==='undefined'||!firebase.auth){ui.loginErr='Google verification load nahi hua.';return render();}
-    ui.loginErr='';
-    const prov=new firebase.auth.GoogleAuthProvider();
-    prov.setCustomParameters({login_hint:found.profile.email});
-    firebase.auth().signInWithPopup(prov).then(res=>{
-      const gEm=(res&&res.user&&res.user.email||'').trim().toLowerCase();
-      if(!gEm||gEm!==(found.profile.email||'').trim().toLowerCase()){
-        ui.loginErr='Yeh Google account registered Gmail ('+found.profile.email+') se match nahi hua.';
-        return render();
-      }
-      ui.fpVerifiedEmail=gEm;ui.fpPin='';ui.loginErr='';ui.loginStep=2;render();
+    if(!found||!found.profile.email){ui.loginErr='Is account mein email nahi juda hai.';return render();}
+    if(typeof firebase==='undefined'||!firebase.auth){ui.loginErr='Firebase Auth load nahi hua.';return render();}
+    ui.loginErr='';ui.fpSentMsg='';
+    firebase.auth().sendPasswordResetEmail(found.profile.email).then(()=>{
+      logAuthAlert('forgot_pin',found.profile.mobile||found.profile.email,'Gmail reset link bheja gaya');
+      ui.fpSentMsg='✓ Reset link aapke Gmail ('+found.profile.email+') par bhej diya gaya hai! Gmail (ya Spam) khol kar link se naya Password set karein, aur phir usi se Login karein.';
+      render();
     }).catch(err=>{
       const c=(err&&err.code)||'';
-      if(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request')return;
-      if(c==='auth/popup-blocked'||c==='auth/operation-not-supported-in-this-environment'){
-        try{sessionStorage.setItem('gj_fp_mob',m);}catch(ex){}
-        firebase.auth().signInWithRedirect(prov).catch(()=>{ui.loginErr='Popup block hai — live app par try karein.';render();});
+      if(c==='auth/user-not-found'&&found.profile.pin){
+        firebase.auth().createUserWithEmailAndPassword(found.profile.email,'gj'+found.profile.pin).then(()=>{
+          return firebase.auth().sendPasswordResetEmail(found.profile.email);
+        }).then(()=>{
+          ui.fpSentMsg='✓ Reset link aapke Gmail ('+found.profile.email+') par bhej diya gaya hai! Gmail (ya Spam) khol kar link se naya Password set karein.';
+          render();
+        }).catch(()=>{ui.loginErr='Reset email bhejne mein dikkat aayi. Dubara try karein.';render();});
         return;
       }
-      ui.loginErr=(c==='auth/unauthorized-domain')?'Google verify sirf live app (GitHub link) par chalega, preview par nahi.':'Google verification fail hua ('+(c||'error')+'). Dubara try karein.';
-      render();
+      ui.loginErr='Reset email error ('+(c||'try again')+').';render();
     });
     return;
   }
   if(a==='resetpin'){
-    const m=(ui.loginMob||'').trim(), ml=m.toLowerCase(), np=(ui.fpPin||'').trim();
+    const m=(ui.loginMob||'').trim(), ml=m.toLowerCase(), isMob=/^\d{10}$/.test(m);
+    const chk=(ui.fpCheck||'').trim().toLowerCase(), clsVal=+(ui.fpCls||0), np=(ui.fpPin||'').trim();
+    if(!chk){ui.loginErr=isMob?'Apna registered Email daalein.':'Apna registered Mobile Number daalein.';return render();}
+    if(!clsVal){ui.loginErr='Apni registered Class chunein.';return render();}
     if(!/^\d{4}$/.test(np)){ui.loginErr='Naya 4-digit PIN daalein.';return render();}
     const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email.toLowerCase()===ml)));
-    if(!found||!ui.fpVerifiedEmail||ui.fpVerifiedEmail!==(found.profile.email||'').trim().toLowerCase()){
-      ui.loginErr='Pehle Google account se verify karein.';ui.loginStep=1;return render();
-    }
-    found.profile.pin=np;S=found;ALL.active=S.id;ui.loggedOut=false;ui.loginStep=0;ui.loginOtp='';ui.fpVerifiedEmail='';ui.fpPin='';ui.loginErr='';save();syncToServer(true);claimActiveSession();
+    if(!found){ui.loginErr='Account nahi mila.';return render();}
+    const okId=isMob?((found.profile.email||'').toLowerCase()===chk):((found.profile.mobile||'')===chk);
+    const okCls=(+found.profile.cls===clsVal);
+    if(!okId||!okCls){ui.loginErr='Email/Mobile ya Class match nahi hui. Sahi details daalein.';return render();}
+    found.profile.pin=np;S=found;ALL.active=S.id;ui.loggedOut=false;ui.loginStep=0;ui.loginOtp='';ui.fpCheck='';ui.fpCls='';ui.fpPin='';ui.loginErr='';save();syncToServer(true);claimActiveSession();
     return goTab('home');
   }
   if(a==='gotosignup'){ui.authMode='signup';ob.mobile=(ui.loginMob||'').trim();ui.loginErr='';ui.loginNotFound=false;return render()}
@@ -1963,7 +1972,7 @@ document.addEventListener('click',e=>{
             ALL.kids.push(nk);save();
             ui.loginNotFound=false;ui.loginStep=1;ui.loginErr='';render();
           }else{
-            ui.loginErr='Is number/email se koi account nahi mila. Pehle Sign Up karein.';ui.loginNotFound=true;render();
+            logAuthAlert('not_found',m,'Account nahi mila');ui.loginErr='Is number/email se koi account nahi mila. Pehle Sign Up karein.';ui.loginNotFound=true;render();
           }
         }).catch(err=>{ui.loginErr='Firebase check error: '+((err&&err.code)||'Network error')+'. Dubara try karein.';ui.loginNotFound=true;render();});
         return;
@@ -1974,14 +1983,23 @@ document.addEventListener('click',e=>{
   }
   if(a==='verifylogin'){
     const pin=(ui.loginOtp||'').trim();
-    if(!/^\d{4}$/.test(pin)){ui.loginErr='Apna 4-digit PIN daalein.';return render();}
+    if(pin.length<4){ui.loginErr='Apna 4-digit PIN ya password daalein.';return render();}
     const m=(ui.loginMob||'').trim(), ml=m.toLowerCase();
     const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email.toLowerCase()===ml)));
     if(!found){ui.loginErr='Is number/email se koi account nahi mila. Pehle Sign Up karein.';ui.loginNotFound=true;ui.loginStep=0;return render();}
-    if(found.profile.pin&&found.profile.pin!==pin){ui.loginErr='Galat PIN. Sahi 4-digit PIN daalein.';return render();}
-    if(!found.profile.pin){found.profile.pin=pin;}
-    S=found;ALL.active=S.id;ui.loggedOut=false;ui.loginNotFound=false;ui.loginStep=0;ui.loginOtp='';ui.loginErr='';save();claimActiveSession();
-    return goTab('home');
+    const finishLogin=(newPin)=>{
+      if(newPin)found.profile.pin=newPin;
+      S=found;ALL.active=S.id;ui.loggedOut=false;ui.loginNotFound=false;ui.loginStep=0;ui.loginOtp='';ui.loginErr='';ui.fpSentMsg='';save();claimActiveSession();
+      goTab('home');
+    };
+    if(!found.profile.pin||found.profile.pin===pin){return finishLogin(found.profile.pin?null:pin);}
+    if(typeof firebase!=='undefined'&&firebase.auth&&found.profile.email&&pin.length>=6){
+      firebase.auth().signInWithEmailAndPassword(found.profile.email,pin).then(()=>{finishLogin(pin);}).catch(()=>{
+        ui.loginErr='Galat PIN ya Password. Sahi PIN daalein ya Forgot PIN? use karein.';render();
+      });
+      return;
+    }
+    logAuthAlert('wrong_pin',m,'Galat PIN dala gaya');ui.loginErr='Galat PIN. Sahi 4-digit PIN daalein.';return render();
   }
   if(a==='logout'){ui.loggedOut=true;ui.authMode='login';ui.loginStep=0;ui.loginOtp='';ui.loginErr='';return render()}
   if(a==='sendotp'){if(!validEmail((ob.email||'').trim()))return fail('Enter a valid email address.');ob.step=1;ob.err='';return render()}
@@ -2025,12 +2043,13 @@ document.addEventListener('change',e=>{
   if(f==='board'){ob.sid='';ob.sent=false}
   if(f==='dist'){ob.block='';ob.sid='';ob.sent=false}
   if(f==='block'){ob.sid='';ob.sent=false}
+  if(f==='fpCls'){ui.fpCls=e.target.value;ui.loginErr='';return}
   if(f==='sid'&&e.target.value!=='none'){ob.sent=false}
   if(!['name','mobile','loginMob','loginOtp','reqName','otp','email','pin','fpPin','switchPin'].includes(f))render();
 });
 document.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset.f;if(f==='utr'){ui.utr=e.target.value;ui.uerr='';return}
   if(f==='loginMob'){ui.loginMob=e.target.value;ui.loginErr='';return}
-  if(f==='loginOtp'){ui.loginOtp=e.target.value.replace(/\D/g,'');ui.loginErr='';return}
+  if(f==='loginOtp'){ui.loginOtp=e.target.value;ui.loginErr='';return}
   if(f==='fpCheck'){ui.fpCheck=e.target.value;ui.loginErr='';return}
   if(f==='fpPin'){ui.fpPin=e.target.value.replace(/\D/g,'');ui.loginErr='';return}
   if(f==='switchPin'){ui.switchPin=e.target.value.replace(/\D/g,'');ui.switchErr='';return}
