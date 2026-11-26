@@ -419,14 +419,14 @@ function handleGoogleUser(u){
   if(!u||!u.email)return;
   const ml=u.email.trim().toLowerCase(), nm=(u.displayName||'').trim();
   const local=ALL.kids.find(k=>k.profile&&k.profile.email&&k.profile.email.toLowerCase()===ml);
-  if(local){S=local;ALL.active=S.id;ui.loggedOut=false;ui.loginErr='';save();return goTab('home');}
+  if(local){S=local;ALL.active=S.id;ui.loggedOut=false;ui.loginErr='';save();claimActiveSession();return goTab('home');}
   if(_db){
     _db.collection('students').where('email','==',ml).limit(1).get().then(snap=>{
       if(!snap.empty){
         const d=snap.docs[0].data(), nk=blankKid('k'+Date.now());
         nk.profile={name:d.name||nm,mobile:d.mobile||'',email:ml,board:(d.board==='CBSE'?'cbse':'bihar'),cls:+(d.cls||9),dist:d.dist||'Patna',block:d.block||'Patna Sadar',sid:'pending',schoolName:d.schoolName||'School'};
         nk.pageTime=d.pageTime||nk.pageTime;nk.videoPts=d.videoPts||0;nk.theoryPts=d.theoryPts||0;
-        ALL.kids.push(nk);S=nk;ALL.active=S.id;ui.loggedOut=false;ui.loginErr='';save();goTab('home');
+        ALL.kids.push(nk);S=nk;ALL.active=S.id;ui.loggedOut=false;ui.loginErr='';save();claimActiveSession();goTab('home');
       }else{
         ui.authMode='signup';if(nm)ob.name=nm;ob.email=ml;ob.err='';ui.loginErr='';render();
       }
@@ -435,12 +435,60 @@ function handleGoogleUser(u){
     ui.authMode='signup';if(nm)ob.name=nm;ob.email=ml;ob.err='';render();
   }
 }
+let _sessUnsub=null, _sessDocId=null;
+function newSessionId(){
+  let dev='';
+  try{dev=localStorage.getItem('gj-dev-id')||'';if(!dev){dev='d'+Math.random().toString(36).slice(2,8)+Date.now().toString(36);localStorage.setItem('gj-dev-id',dev);}}catch(e){dev='d'+Date.now();}
+  return dev+'_'+Date.now();
+}
+function fbDocId(){if(!S||!S.profile)return '';const m=(S.profile.mobile||'').trim();if(!m)return S.id;return (ALL.kids.indexOf(S)<=0)?m:(m+'_'+S.id);}
+function claimActiveSession(){
+  if(!S||!S.profile)return;
+  const sid=newSessionId();
+  S.sessionId=sid;save();
+  const docId=fbDocId();
+  if(_db&&docId){
+    _db.collection('students').doc(docId).set({activeSession:sid,lastSeen:Date.now()},{merge:true}).catch(()=>{});
+  }
+  watchActiveSession();
+}
+function watchActiveSession(){
+  if(!_db||!S||!S.profile||ui.loggedOut)return;
+  const docId=fbDocId();
+  if(!docId)return;
+  if(_sessUnsub&&_sessDocId===docId)return;
+  if(_sessUnsub){try{_sessUnsub();}catch(e){}_sessUnsub=null;}
+  _sessDocId=docId;
+  _sessUnsub=_db.collection('students').doc(docId).onSnapshot(doc=>{
+    if(!doc.exists||!S||!S.profile||ui.loggedOut)return;
+    const d=doc.data();
+    if(d&&d.activeSession&&S.sessionId&&d.activeSession!==S.sessionId){
+      if(_sessUnsub){try{_sessUnsub();}catch(e){}_sessUnsub=null;_sessDocId=null;}
+      ui.loggedOut=true;ui.authMode='login';ui.loginStep=0;ui.loginOtp='';
+      ui.loginErr='Yeh account kisi doosre device par login ho gaya hai. Ek baar mein sirf 1 device par chalega.';
+      render();
+    }
+  },()=>{});
+}
 function initFirebaseStudent(){
   try{
     if(typeof firebase==='undefined')return;
     if(!firebase.apps.length)firebase.initializeApp(FB_CONFIG);
     _db=firebase.firestore();
-    if(firebase.auth){firebase.auth().getRedirectResult().then(r=>{if(r&&r.user)handleGoogleUser(r.user);}).catch(()=>{});}
+    setTimeout(()=>{if(S&&S.profile&&!ui.loggedOut)watchActiveSession();},300);
+    if(firebase.auth){firebase.auth().getRedirectResult().then(r=>{
+      if(r&&r.user){
+        let fpMob='';try{fpMob=sessionStorage.getItem('gj_fp_mob')||'';sessionStorage.removeItem('gj_fp_mob');}catch(ex){}
+        if(fpMob){
+          const gEm=(r.user.email||'').trim().toLowerCase();
+          const fnd=ALL.kids.find(k=>k.profile&&(k.profile.mobile===fpMob||(k.profile.email&&k.profile.email===fpMob.toLowerCase())));
+          if(fnd&&gEm&&gEm===(fnd.profile.email||'').trim().toLowerCase()){
+            ui.authMode='login';ui.loginMob=fpMob;ui.fpVerifiedEmail=gEm;ui.fpPin='';ui.loginErr='';ui.loginStep=2;render();return;
+          }
+        }
+        handleGoogleUser(r.user);
+      }
+    }).catch(()=>{});}
     _db.collection('gayan').doc('adminState').onSnapshot(doc=>{
       if(doc.exists){
         const d=doc.data();
@@ -831,22 +879,30 @@ function viewAuth(){
 function viewLogin(){
   const err=ui.loginErr?`<p class="err" role="alert">${esc(ui.loginErr)}</p>`:'';
   if(ui.loginStep===1){
-    return `<div class="card clean-card" style="display:flex;flex-direction:column;gap:12px;margin-block:auto">
-     <div style="text-align:center"><h2>Login with OTP</h2><p class="muted small">Mobile: <b>${esc(ui.loginMob)}</b></p></div>
-     <div class="ok-note">Demo OTP: <b class="num">123456</b> (Live app mein SMS OTP aayega)</div>
-     <div class="field"><label for="f-lotp">Enter 6-digit OTP</label><input id="f-lotp" data-f="loginOtp" type="tel" inputmode="numeric" maxlength="6" value="${esc(ui.loginOtp)}" placeholder="123456"></div>
+    if(ui.loginStep===2){
+      return `<div class="card clean-card" style="display:flex;flex-direction:column;gap:10px;margin-block:auto">
+       <div style="text-align:center"><h2>Reset 4-Digit PIN</h2><p class="muted small">Verified Google: <b style="color:var(--good)">${esc(ui.fpVerifiedEmail||'')}</b> ✓</p></div>
+       <div class="field"><label for="f-fpp">Naya 4-Digit PIN *</label><input id="f-fpp" data-f="fpPin" type="password" inputmode="numeric" maxlength="4" value="${esc(ui.fpPin||'')}" placeholder="••••"></div>
+       ${err}
+       <button class="btn block" data-act="resetpin">Save New PIN &amp; Login ›</button>
+       <button class="link" style="text-align:center" data-act="loginback">‹ Back to Login</button>
+      </div>`;
+    }
+    return `<div class="card clean-card" style="display:flex;flex-direction:column;gap:11px;margin-block:auto">
+     <div style="text-align:center"><h2>Enter 4-Digit PIN</h2><p class="muted small">Account: <b>${esc(ui.loginMob)}</b></p></div>
+     <div class="field"><label for="f-lotp">4-Digit PIN</label><input id="f-lotp" data-f="loginOtp" type="password" inputmode="numeric" maxlength="4" value="${esc(ui.loginOtp)}" placeholder="••••"></div>
      ${err}
-     <button class="btn block" data-act="verifylogin">Verify &amp; Login</button>
-     <button class="link" style="text-align:center" data-act="loginback">‹ Change Mobile Number</button>
+     <button class="btn block" data-act="verifylogin">Login ›</button>
+     <div style="display:flex;justify-content:space-between;gap:8px"><button class="link" data-act="loginback">‹ Change Mobile / Email</button><button class="link" data-act="forgotpin">Forgot PIN?</button></div>
     </div>`;
   }
   return `<div class="card clean-card" style="display:flex;flex-direction:column;gap:12px;margin-block:auto">
-   <div style="text-align:center"><h2>Student Login</h2><p class="muted small">Apna registered Mobile Number daal kar OTP se login karein.</p></div>
+   <div style="text-align:center"><h2>Student Login</h2><p class="muted small">Apna registered Mobile Number ya Email daal kar login karein.</p></div>
    <button type="button" class="btn block" style="background:#fff;color:#1E1B4B;border:2px solid var(--line);box-shadow:0 3px 0 var(--line);display:flex;align-items:center;justify-content:center;gap:10px" data-act="googlesignup"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.8-5.5 3.8-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.1.8 3.9 1.5l2.6-2.5C16.9 3.4 14.7 2.5 12 2.5 6.8 2.5 2.5 6.8 2.5 12s4.3 9.5 9.5 9.5c5.5 0 9.1-3.9 9.1-9.3 0-.6-.1-1.1-.2-1.6H12z"/></svg><span>Continue with Google</span></button>
-   <div class="field"><label for="f-lmob">Mobile Number ya Email</label><input id="f-lmob" data-f="loginMob" type="text" value="${esc(ui.loginMob)}" placeholder="e.g. 9876543210 ya student@gmail.com"></div>
+   <div class="field"><label for="f-lmob">Mobile Number ya Email</label><input id="f-lmob" data-f="loginMob" type="text" value="${esc(ui.loginMob)}" placeholder="10-digit mobile ya email"></div>
    ${err}
    ${ui.loginNotFound?`<button class="btn ghost block" data-act="gotosignup">Pehle Sign Up karein ›</button>`:''}
-   <button class="btn block" data-act="sendloginotp">Send OTP</button>
+   <button class="btn block" data-act="sendloginotp">Continue ›</button>
   </div>`;
 }
 function viewOnboard(){
@@ -863,7 +919,10 @@ function viewOnboard(){
     <div class="field" style="gap:2px"><label for="f-name" style="font-size:.74rem">Full name *</label><input id="f-name" style="min-height:36px;padding:6px 9px;font-size:.86rem" data-f="name" value="${esc(ob.name)}" placeholder="Student name" autocomplete="name"></div>
     <div class="field" style="gap:2px"><label for="f-mobile" style="font-size:.74rem">Mobile *</label><input id="f-mobile" style="min-height:36px;padding:6px 9px;font-size:.86rem" data-f="mobile" type="tel" inputmode="numeric" maxlength="10" value="${esc(ob.mobile||'')}" placeholder="10-digit mobile" autocomplete="tel"></div>
    </div>
-   <div class="field" style="gap:2px"><label for="f-suemail" style="font-size:.74rem">Email address *</label><input id="f-suemail" style="min-height:36px;padding:6px 9px;font-size:.86rem" data-f="email" type="email" inputmode="email" value="${esc(ob.email||'')}" placeholder="student@gmail.com" autocomplete="email"></div>
+   <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:7px">
+    <div class="field" style="gap:2px"><label for="f-suemail" style="font-size:.74rem">Email address *</label><input id="f-suemail" style="min-height:36px;padding:6px 9px;font-size:.84rem" data-f="email" type="email" inputmode="email" value="${esc(ob.email||'')}" placeholder="student@gmail.com" autocomplete="email"></div>
+    <div class="field" style="gap:2px"><label for="f-pin" style="font-size:.74rem">${S.profile?'PIN (4-digit)':'4-Digit PIN *'}</label><input id="f-pin" style="min-height:36px;padding:6px 9px;font-size:.84rem" data-f="pin" type="password" inputmode="numeric" maxlength="4" value="${esc(ob.pin||'')}" placeholder="••••"></div>
+   </div>
    <div style="display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:6px">
     <div class="field" style="gap:2px"><label for="f-state" style="font-size:.74rem">State</label><select id="f-state" style="min-height:36px;padding:5px 6px;font-size:.82rem" data-f="state"><option>Bihar</option><option disabled>Other (soon)</option></select></div>
     <div class="field" style="gap:2px"><label for="f-board" style="font-size:.74rem">Board</label><select id="f-board" style="min-height:36px;padding:5px 6px;font-size:.82rem" data-f="board">${Object.entries(BOARDS).map(([k,v])=>opt(k,v,ob.board===k)).join('')}</select></div>
@@ -992,7 +1051,22 @@ const EXTRA_BANK={
 function normCat(t){if(t==='tick')return 'tick';if(t==='short'||t==='oneliner')return 'short';if(t==='theory')return 'theory';if(t==='long'||t==='book')return 'long';if(t==='video')return 'video';return 'mcq';}
 function ytEmbedUrl(u){
   const m=String(u||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{6,})/);
-  return m?('https://www.youtube.com/embed/'+m[1]+'?rel=0&modestbranding=1&iv_load_policy=3'):null;
+  return m?('https://www.youtube-nocookie.com/embed/'+m[1]+'?rel=0&modestbranding=1&iv_load_policy=3&playsinline=1'):null;
+}
+function findNewlyUnlocked(){
+  if(!S||!S.profile||ui.loggedOut||!ADM||!ADM.approvedUnlocks)return null;
+  const p=S.profile, k1=p.mobile||p.name, k2=p.email||'';
+  S.seenUnlockPopups=S.seenUnlockPopups||{};
+  const keys=Object.keys(ADM.approvedUnlocks).filter(k=>ADM.approvedUnlocks[k]&&(k.startsWith(k1+'|')||(k2&&k.startsWith(k2+'|'))));
+  for(const k of keys){
+    const fid=k.split('|')[1];
+    if(fid&&!S.seenUnlockPopups[fid]){
+      const req=(ADM.unlockRequests||[]).find(r=>r.itemId===fid&&(r.mobile===p.mobile||r.student===p.name));
+      const crs=(typeof allCoursesList==='function'?allCoursesList(p.board):[]).find(c=>c.id===fid);
+      return {id:fid,title:(req&&req.item)||(crs&&crs.title)||fid};
+    }
+  }
+  return null;
 }
 function isUnlocked(fid){
   if(S&&S.unlocked&&S.unlocked[fid])return true;
@@ -1180,7 +1254,7 @@ function viewStudy(){
       inner=`<div class="one" style="white-space:pre-line"><b>Short Answer (${esc(bkObj.name)}):</b> ${esc(it.ans)}</div>${twoBtns(nxt)}`;
     }else if(mt==='video'){
       const em=ytEmbedUrl(it.videoUrl);
-      const player=em?`<div class="vid-wrap" style="position:relative;padding-top:56.25%;border-radius:14px;overflow:hidden;background:#000;user-select:none;-webkit-user-select:none"><iframe src="${esc(em)}" title="${esc(it.q)}" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe><div aria-hidden="true" style="position:absolute;top:0;left:0;right:0;height:52px;z-index:3;background:transparent"></div><div aria-hidden="true" style="position:absolute;bottom:0;right:44px;width:96px;height:40px;z-index:3;background:transparent"></div></div>`:(it.videoUrl?`<video class="vid-wrap" controls controlsList="nodownload" disablePictureInPicture playsinline style="width:100%;border-radius:14px;background:#000" src="${esc(it.videoUrl)}"></video>`:'');
+      const player=em?`<div class="vid-wrap" style="position:relative;padding-top:56.25%;border-radius:14px;overflow:hidden;background:#000;user-select:none;-webkit-user-select:none"><iframe src="${esc(em)}" title="${esc(it.q)}" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe><div aria-hidden="true" style="position:absolute;top:0;left:0;right:0;height:54px;z-index:3;background:transparent"></div><div aria-hidden="true" style="position:absolute;top:54px;bottom:44px;right:0;width:64px;z-index:3;background:transparent"></div><div aria-hidden="true" style="position:absolute;bottom:44px;left:0;width:65%;height:92px;z-index:3;background:transparent"></div><div aria-hidden="true" style="position:absolute;bottom:0;right:42px;width:105px;height:42px;z-index:3;background:transparent"></div></div>`:(it.videoUrl?`<video class="vid-wrap" controls controlsList="nodownload" disablePictureInPicture playsinline style="width:100%;border-radius:14px;background:#000" src="${esc(it.videoUrl)}"></video>`:'');
       const vLogCount=(S.videoLogs||[]).filter(v=>v.key===key).reduce((a,v)=>a+(v.mins||0),0);
       inner=`${player}${it.ans?`<div class="one" style="white-space:pre-line">${esc(it.ans)}</div>`:''}
       <div class="ok-note" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1501,7 +1575,7 @@ function studentsHTML(){
   const kids=ALL.kids.filter(k=>k.profile); if(!ALL.parent||!kids.length)return '';
   return `<section><h3>Students under this parent</h3>
    <div class="card" style="display:flex;flex-direction:column;gap:6px"><p class="small">Parent: <b>${esc(maskEmail(ALL.parent.email))}</b></p>
-   <div class="rows">${kids.map(k=>`<div class="row" style="grid-template-columns:44px minmax(0,1fr) auto">${avatar(k.profile,'sm')}<span class="nm"><b>${esc(k.profile.name)}</b><span>Class ${k.profile.cls} · ${BOARDS[k.profile.board]}</span></span>${k.id===S.id?'<span class="pill">Active</span>':`<button class="btn ghost" style="min-height:40px;padding:0 14px" data-act="switch" data-v="${esc(k.id)}">Switch</button>`}</div>`).join('')}</div>
+   <div class="rows">${kids.map(k=>`<div class="row" style="grid-template-columns:44px minmax(0,1fr) auto">${avatar(k.profile,'sm')}<span class="nm"><b>${esc(k.profile.name)}</b><span>Class ${k.profile.cls} · ${BOARDS[k.profile.board]}</span></span>${k.id===S.id?`<button class="btn ghost" style="min-height:36px;padding:0 10px;font-size:.78rem" data-act="togglepinlock">${S.profile.pinLock!==false?'🔒 Lock ON':'🔓 Lock OFF'}</button>`:`<button class="btn ghost" style="min-height:40px;padding:0 14px" data-act="switch" data-v="${esc(k.id)}">${(k.profile.pin&&k.profile.pinLock!==false)?'🔒 Switch':'Switch'}</button>`}</div>`).join('')}</div>
    ${kids.length<5?'<button class="btn" data-act="addkid">+ Add another student</button>':'<p class="small">Up to 5 students per parent.</p>'}</div></section>`}
 function syllabusProgressHTML(p){
   const cls=p.cls, admSubs=admSubjectsFor(p.board,cls);
@@ -1568,10 +1642,14 @@ function paint(){
 }
 function render(){
   const app=$('#app');
-  if(!S.profile||ui.loggedOut||ui.edit){const savedP=S.profile;if(ui.loggedOut)S.profile=null;app.innerHTML=shell(viewOnboard(),false);if(ui.loggedOut)S.profile=savedP;paint();return}
+  if(!S.profile||ui.loggedOut){const savedP=S.profile;if(ui.loggedOut)S.profile=null;app.innerHTML=shell(viewOnboard(),false);if(ui.loggedOut)S.profile=savedP;paint();return}
   if(ui.tab==='test'&&ui.test&&ui.test.stage==='run'){app.innerHTML=`<div class="wrap">${viewTest()}</div>`;paint();ui.anim=false;return}
   const v={home:viewHome,study:viewStudy,course:viewCourse,test:viewTest,rank:viewRank,me:viewMe}[ui.tab]||viewHome;
-  app.innerHTML=shell(v(),true);
+  const _newUn=findNewlyUnlocked();
+  const _unModal=_newUn?`<div style="position:fixed;inset:0;z-index:999;background:rgba(15,31,75,.65);display:flex;align-items:center;justify-content:center;padding:18px" role="dialog" aria-modal="true"><div class="card pay-ok" style="max-width:340px;width:100%;box-shadow:0 18px 40px rgba(0,0,0,.35);animation:popIn .25s ease"><div class="pay-chk" style="width:62px;height:62px;font-size:2rem">🎉</div><h2 style="color:var(--good)">Course Unlocked!</h2><p class="muted">Badhai ho <b>${esc(S.profile.name)}</b>! Aapka course <b>${esc(_newUn.title)}</b> ab unlock ho gaya hai.</p><div class="ok-note" style="width:100%;text-align:center">Ab aap sabhi Notes, Videos aur Tests padh sakte hain ✓</div><button class="btn block" style="background:var(--good);box-shadow:0 4px 0 #0B5D2A" data-act="ackunlock" data-v="${esc(_newUn.id)}">Start Learning Now ›</button></div></div>`:'';
+  const _swKid=ui.switchTarget?ALL.kids.find(x=>x.id===ui.switchTarget):null;
+  const _swModal=(_swKid&&_swKid.profile)?`<div style="position:fixed;inset:0;z-index:999;background:rgba(15,31,75,.65);display:flex;align-items:center;justify-content:center;padding:18px" role="dialog" aria-modal="true"><div class="card clean-card" style="max-width:320px;width:100%;display:flex;flex-direction:column;gap:10px;box-shadow:0 18px 40px rgba(0,0,0,.35)"><div style="text-align:center"><h2>🔒 Profile Locked</h2><p class="muted small"><b>${esc(_swKid.profile.name)}</b> ka account kholne ke liye unka 4-digit PIN daalein.</p></div><div class="field"><label for="f-swp">4-Digit PIN</label><input id="f-swp" data-f="switchPin" type="password" inputmode="numeric" maxlength="4" value="${esc(ui.switchPin||'')}" placeholder="••••"></div>${ui.switchErr?`<p class="err" role="alert">${esc(ui.switchErr)}</p>`:''}<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn ghost" data-act="cancelswitch">Cancel</button><button class="btn" data-act="confirmswitch">Unlock ›</button></div></div></div>`:'';
+  app.innerHTML=shell(v(),true)+_unModal+_swModal;
   paint();
   ui.anim=false;
 }
@@ -1779,6 +1857,7 @@ document.addEventListener('click',e=>{
     if(!ob.name.trim())return fail('Enter your name.');
     if(!/^\d{10}$/.test((ob.mobile||'').trim()))return fail('Enter a valid 10-digit mobile number.');
     if(!validEmail((ob.email||'').trim()))return fail('Enter a valid email address.');
+    if(!S.profile&&!/^\d{4}$/.test((ob.pin||'').trim()))return fail('Enter a 4-digit PIN.');
     if(!ob.dist)return fail('Select a district.');
     if(!ob.block)return fail('Select a block.');
 
@@ -1789,12 +1868,56 @@ document.addEventListener('click',e=>{
     S.consent={email:ob.email.trim().toLowerCase(),ts:(S.consent&&S.consent.ts)||Date.now()};
     ALL.parent=S.consent;
     if(ui.loggedOut){const nk=blankKid('k'+Date.now());ALL.kids.push(nk);S=nk;ALL.active=S.id;ui.loggedOut=false;}
-    S.profile={name:ob.name.trim(),mobile:(ob.mobile||'').trim(),email:(ob.email||'').trim().toLowerCase(),board:ob.board,cls:+ob.cls,dist:ob.dist,block:ob.block,sid,schoolName};
-    save();syncToServer(true);ui.edit=false;ui.subj=null;ui.open=null;ui.picked={};ui.test=null;
+    S.profile={name:ob.name.trim(),mobile:(ob.mobile||'').trim(),email:(ob.email||'').trim().toLowerCase(),pin:((ob.pin||'').trim()||(S.profile&&S.profile.pin)||''),board:ob.board,cls:+ob.cls,dist:ob.dist,block:ob.block,sid,schoolName};
+    save();syncToServer(true);claimActiveSession();ui.edit=false;ui.subj=null;ui.open=null;ui.picked={};ui.test=null;
     return goTab('home');
   }
   if(a==='authmode'){ui.authMode=v;ui.loginErr='';ui.loginStep=0;return render()}
-  if(a==='loginback'){ui.loginStep=0;ui.loginErr='';return render()}
+  if(a==='ackunlock'){
+    S.seenUnlockPopups=S.seenUnlockPopups||{};S.seenUnlockPopups[v]=true;
+    S.unlocked=S.unlocked||{};S.unlocked[v]=true;save();syncToServer(true);
+    ui.tab=(v&&v.startsWith('c-'))?'study':'study';ui.buyCourse=null;ui.payState=null;ui.payStep=0;
+    return render();
+  }
+  if(a==='loginback'){ui.loginStep=0;ui.loginErr='';ui.fpVerifiedEmail='';ui.fpPin='';return render()}
+  if(a==='forgotpin'){
+    const m=(ui.loginMob||'').trim(), ml=m.toLowerCase();
+    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email===ml)));
+    if(!found||!found.profile.email){ui.loginErr='Is account mein Gmail link nahi hai.';return render();}
+    if(typeof firebase==='undefined'||!firebase.auth){ui.loginErr='Google verification load nahi hua.';return render();}
+    ui.loginErr='';
+    const prov=new firebase.auth.GoogleAuthProvider();
+    prov.setCustomParameters({login_hint:found.profile.email});
+    firebase.auth().signInWithPopup(prov).then(res=>{
+      const gEm=(res&&res.user&&res.user.email||'').trim().toLowerCase();
+      if(!gEm||gEm!==(found.profile.email||'').trim().toLowerCase()){
+        ui.loginErr='Yeh Google account registered Gmail ('+found.profile.email+') se match nahi hua.';
+        return render();
+      }
+      ui.fpVerifiedEmail=gEm;ui.fpPin='';ui.loginErr='';ui.loginStep=2;render();
+    }).catch(err=>{
+      const c=(err&&err.code)||'';
+      if(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request')return;
+      if(c==='auth/popup-blocked'||c==='auth/operation-not-supported-in-this-environment'){
+        try{sessionStorage.setItem('gj_fp_mob',m);}catch(ex){}
+        firebase.auth().signInWithRedirect(prov).catch(()=>{ui.loginErr='Popup block hai — live app par try karein.';render();});
+        return;
+      }
+      ui.loginErr=(c==='auth/unauthorized-domain')?'Google verify sirf live app (GitHub link) par chalega, preview par nahi.':'Google verification fail hua ('+(c||'error')+'). Dubara try karein.';
+      render();
+    });
+    return;
+  }
+  if(a==='resetpin'){
+    const m=(ui.loginMob||'').trim(), ml=m.toLowerCase(), np=(ui.fpPin||'').trim();
+    if(!/^\d{4}$/.test(np)){ui.loginErr='Naya 4-digit PIN daalein.';return render();}
+    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email===ml)));
+    if(!found||!ui.fpVerifiedEmail||ui.fpVerifiedEmail!==(found.profile.email||'').trim().toLowerCase()){
+      ui.loginErr='Pehle Google account se verify karein.';ui.loginStep=1;return render();
+    }
+    found.profile.pin=np;S=found;ALL.active=S.id;ui.loggedOut=false;ui.loginStep=0;ui.loginOtp='';ui.fpVerifiedEmail='';ui.fpPin='';ui.loginErr='';save();syncToServer(true);claimActiveSession();
+    return goTab('home');
+  }
   if(a==='gotosignup'){ui.authMode='signup';ob.mobile=(ui.loginMob||'').trim();ui.loginErr='';ui.loginNotFound=false;return render()}
   if(a==='googlesignup'){
     if(typeof firebase!=='undefined'&&firebase.auth){
@@ -1830,7 +1953,7 @@ document.addEventListener('click',e=>{
         qP.then(arr=>{
           if(arr&&arr.length){
             const d=arr[0], nk=blankKid('k'+Date.now());
-            nk.profile={name:d.name,mobile:d.mobile||(/^\d{10}$/.test(m)?m:''),email:d.email||ml,board:(d.board==='CBSE'?'cbse':'bihar'),cls:+(d.cls||9),dist:d.dist||'Patna',block:d.block||'Patna Sadar',sid:'pending',schoolName:d.schoolName||'School'};
+            nk.profile={name:d.name,mobile:d.mobile||(/^\d{10}$/.test(m)?m:''),email:d.email||ml,pin:d.pin||'',board:(d.board==='CBSE'?'cbse':'bihar'),cls:+(d.cls||9),dist:d.dist||'Patna',block:d.block||'Patna Sadar',sid:'pending',schoolName:d.schoolName||'School'};
             nk.pageTime=d.pageTime||nk.pageTime;nk.videoPts=d.videoPts||0;nk.theoryPts=d.theoryPts||0;
             ALL.kids.push(nk);save();
             ui.loginNotFound=false;ui.loginStep=1;ui.loginErr='';render();
@@ -1845,11 +1968,14 @@ document.addEventListener('click',e=>{
     ui.loginNotFound=false;ui.loginStep=1;ui.loginErr='';return render();
   }
   if(a==='verifylogin'){
-    if((ui.loginOtp||'').trim()!=='123456'){ui.loginErr='Galat OTP. Demo ke liye 123456 daalein.';return render();}
+    const pin=(ui.loginOtp||'').trim();
+    if(!/^\d{4}$/.test(pin)){ui.loginErr='Apna 4-digit PIN daalein.';return render();}
     const m=(ui.loginMob||'').trim(), ml=m.toLowerCase();
     const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email===ml)));
     if(!found){ui.loginErr='Is number/email se koi account nahi mila. Pehle Sign Up karein.';ui.loginNotFound=true;ui.loginStep=0;return render();}
-    S=found;ALL.active=S.id;ui.loggedOut=false;ui.loginNotFound=false;ui.loginStep=0;ui.loginOtp='';ui.loginErr='';save();
+    if(found.profile.pin&&found.profile.pin!==pin){ui.loginErr='Galat PIN. Sahi 4-digit PIN daalein.';return render();}
+    if(!found.profile.pin){found.profile.pin=pin;}
+    S=found;ALL.active=S.id;ui.loggedOut=false;ui.loginNotFound=false;ui.loginStep=0;ui.loginOtp='';ui.loginErr='';save();claimActiveSession();
     return goTab('home');
   }
   if(a==='logout'){ui.loggedOut=true;ui.authMode='login';ui.loginStep=0;ui.loginOtp='';ui.loginErr='';return render()}
@@ -1864,7 +1990,24 @@ document.addEventListener('click',e=>{
     S=ALL.kids[0];ALL.active=S.id;save();
     ui.confirmReset=false;ui.subj=null;ui.open=null;ui.test=null;ui.tab='home';ui.edit=false;
     ob=freshOb(S.consent?S.consent.email:'');return render()}
-  if(a==='switch'){const k=ALL.kids.find(x=>x.id===v);if(k&&k.profile){S=k;ALL.active=k.id;save();ui.subj=null;ui.open=null;ui.test=null;ui.confirmReset=false;return goTab('me')}return}
+  if(a==='togglepinlock'){S.profile.pinLock=(S.profile.pinLock===false)?true:false;save();return render();}
+  if(a==='cancelswitch'){ui.switchTarget=null;ui.switchPin='';ui.switchErr='';return render();}
+  if(a==='confirmswitch'){
+    const k=ALL.kids.find(x=>x.id===ui.switchTarget);
+    if(!k||!k.profile){ui.switchTarget=null;return render();}
+    const pin=(ui.switchPin||'').trim();
+    if(pin!==k.profile.pin){ui.switchErr='Galat PIN. Sahi 4-digit PIN daalein.';return render();}
+    ui.switchTarget=null;ui.switchPin='';ui.switchErr='';
+    S=k;ALL.active=k.id;save();ui.subj=null;ui.open=null;ui.test=null;ui.confirmReset=false;return goTab('me');
+  }
+  if(a==='switch'){
+    const k=ALL.kids.find(x=>x.id===v);
+    if(k&&k.profile){
+      if(k.profile.pin&&k.profile.pinLock!==false){ui.switchTarget=k.id;ui.switchPin='';ui.switchErr='';return render();}
+      S=k;ALL.active=k.id;save();ui.subj=null;ui.open=null;ui.test=null;ui.confirmReset=false;return goTab('me');
+    }
+    return;
+  }
   if(a==='addkid'){if(!ALL.parent||ALL.kids.filter(k=>k.profile).length>=5)return;
     const k=blankKid('k'+Date.now());k.consent=ALL.parent;ALL.kids.push(k);S=k;ALL.active=k.id;save();
     ob=freshOb(ALL.parent.email);ob.step=2;ui.edit=false;ui.subj=null;ui.open=null;ui.test=null;return render()}
@@ -1883,7 +2026,10 @@ document.addEventListener('change',e=>{
 document.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset.f;if(f==='utr'){ui.utr=e.target.value;ui.uerr='';return}
   if(f==='loginMob'){ui.loginMob=e.target.value;ui.loginErr='';return}
   if(f==='loginOtp'){ui.loginOtp=e.target.value.replace(/\D/g,'');ui.loginErr='';return}
-  if(['name','mobile','reqName','otp','email'].includes(f)){ob[f]=(f==='otp'||f==='mobile')?e.target.value.replace(/\D/g,''):e.target.value;ob.err=''}});
+  if(f==='fpCheck'){ui.fpCheck=e.target.value;ui.loginErr='';return}
+  if(f==='fpPin'){ui.fpPin=e.target.value.replace(/\D/g,'');ui.loginErr='';return}
+  if(f==='switchPin'){ui.switchPin=e.target.value.replace(/\D/g,'');ui.switchErr='';return}
+  if(['name','mobile','reqName','otp','email','pin'].includes(f)){ob[f]=(f==='otp'||f==='mobile'||f==='pin')?e.target.value.replace(/\D/g,''):e.target.value;ob.err=''}});
 
 let _t0=Date.now(), _lastSync=Date.now(), _dirtySync=false;
 function syncToServer(force){
@@ -1900,14 +2046,14 @@ function syncToServer(force){
     });
     localStorage.setItem('vidya-analytics-v1',JSON.stringify({pageTime:allPages,subjTime:allSubj,lastTab:ui.tab||'home',ts:now}));
     if(_db&&S&&S.profile){
-      const p=S.profile, docId=p.mobile||S.id;
+      const p=S.profile, docId=fbDocId();
       const mMap={home:'Home',study:'Study',course:'Course',test:'Test',rank:'Rank',me:'Profile'};
       _db.collection('students').doc(docId).set({
-        name:p.name,mobile:p.mobile||'',email:p.email||'',cls:p.cls,board:BOARDS[p.board]||p.board,
+        name:p.name,mobile:p.mobile||'',email:p.email||'',pin:p.pin||'',cls:p.cls,board:BOARDS[p.board]||p.board,
         dist:p.dist,block:p.block,schoolName:p.schoolName||'',
         pts:myPts(),videoPts:S.videoPts||0,theoryPts:S.theoryPts||0,
         studiedN:Object.keys(S.studied||{}).length,attemptsN:(S.attempts||[]).length,
-        streakN:streak(),currentPage:mMap[ui.tab||'home']||'Home',
+        unlocked:Object.keys(S.unlocked||{}),streakN:streak(),currentPage:mMap[ui.tab||'home']||'Home',
         pageTime:S.pageTime||{},dailyTime:S.dailyTime||{},subjTime:S.subjTime||{},
         attempts:(S.attempts||[]).slice(-5).reverse(),lastSeen:now
       },{merge:true}).catch(()=>{});
