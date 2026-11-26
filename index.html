@@ -1678,7 +1678,7 @@ document.addEventListener('click',e=>{
       if(ui.loginStep===1){ui.loginStep=0;ui.loginErr='';return render();}
       if(ui.authMode==='signup'){ui.authMode='login';return render();}
       try{if(history.length>1){history.back();return;}}catch(ex){}
-      if(ui.loggedOut&&S.profile){ui.loggedOut=false;return render();}
+      
       return;
     }
     if(ui.tab==='study'){
@@ -2002,7 +2002,7 @@ document.addEventListener('click',e=>{
     }
     logAuthAlert('wrong_pin',m,'Galat PIN dala gaya');ui.loginErr='Galat PIN. Sahi 4-digit PIN daalein.';return render();
   }
-  if(a==='logout'){ui.loggedOut=true;ui.authMode='login';ui.loginStep=0;ui.loginOtp='';ui.loginErr='';return render()}
+  if(a==='logout'){try{localStorage.setItem('gj-logged-out','1');}catch(ex){}ui.loggedOut=true;ui.authMode='login';ui.loginStep=0;ui.loginOtp='';ui.loginErr='';return render()}
   if(a==='sendotp'){if(!validEmail((ob.email||'').trim()))return fail('Enter a valid email address.');ob.step=1;ob.err='';return render()}
   if(a==='verifyotp'){if((ob.otp||'').trim()!=='123456')return fail('Incorrect code.');ob.step=2;ob.err='';return render()}
   if(a==='authback'){ob.step=Math.max(0,ob.step-1);ob.err='';return render()}
