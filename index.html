@@ -1882,7 +1882,7 @@ document.addEventListener('click',e=>{
   if(a==='loginback'){ui.loginStep=0;ui.loginErr='';ui.fpVerifiedEmail='';ui.fpPin='';return render()}
   if(a==='forgotpin'){
     const m=(ui.loginMob||'').trim(), ml=m.toLowerCase();
-    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email===ml)));
+    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email.toLowerCase()===ml)));
     if(!found||!found.profile.email){ui.loginErr='Is account mein Gmail link nahi hai.';return render();}
     if(typeof firebase==='undefined'||!firebase.auth){ui.loginErr='Google verification load nahi hua.';return render();}
     ui.loginErr='';
@@ -1911,7 +1911,7 @@ document.addEventListener('click',e=>{
   if(a==='resetpin'){
     const m=(ui.loginMob||'').trim(), ml=m.toLowerCase(), np=(ui.fpPin||'').trim();
     if(!/^\d{4}$/.test(np)){ui.loginErr='Naya 4-digit PIN daalein.';return render();}
-    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email===ml)));
+    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email.toLowerCase()===ml)));
     if(!found||!ui.fpVerifiedEmail||ui.fpVerifiedEmail!==(found.profile.email||'').trim().toLowerCase()){
       ui.loginErr='Pehle Google account se verify karein.';ui.loginStep=1;return render();
     }
@@ -1946,21 +1946,26 @@ document.addEventListener('click',e=>{
   if(a==='sendloginotp'){
     const m=(ui.loginMob||'').trim(), ml=m.toLowerCase();
     if(!/^\d{10}$/.test(m)&&!validEmail(ml)){ui.loginErr='Enter a valid 10-digit mobile number or email.';ui.loginNotFound=false;return render();}
-    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email===ml)));
+    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email.toLowerCase()===ml)));
     if(!found){
       if(_db){
-        const qP=/^\d{10}$/.test(m)?_db.collection('students').doc(m).get().then(doc=>doc.exists?[doc.data()]:[]):_db.collection('students').where('email','==',ml).limit(1).get().then(snap=>snap.empty?[]:[snap.docs[0].data()]);
+        const fallbackScan=()=>_db.collection('students').limit(500).get().then(snap=>{
+          const hit=[];snap.forEach(doc=>{const d=doc.data()||{};if((d.mobile||'').trim()===m||(d.email||'').trim().toLowerCase()===ml)hit.push(d);});return hit;
+        });
+        const qP=/^\d{10}$/.test(m)
+          ?_db.collection('students').doc(m).get().then(doc=>doc.exists?[doc.data()]:fallbackScan())
+          :_db.collection('students').where('email','==',ml).limit(1).get().then(snap=>snap.empty?fallbackScan():[snap.docs[0].data()]);
         qP.then(arr=>{
           if(arr&&arr.length){
             const d=arr[0], nk=blankKid('k'+Date.now());
-            nk.profile={name:d.name,mobile:d.mobile||(/^\d{10}$/.test(m)?m:''),email:d.email||ml,pin:d.pin||'',board:(d.board==='CBSE'?'cbse':'bihar'),cls:+(d.cls||9),dist:d.dist||'Patna',block:d.block||'Patna Sadar',sid:'pending',schoolName:d.schoolName||'School'};
+            nk.profile={name:d.name,mobile:d.mobile||(/^\d{10}$/.test(m)?m:''),email:(d.email||ml).toLowerCase(),pin:d.pin||'',board:(d.board==='CBSE'?'cbse':'bihar'),cls:+(d.cls||9),dist:d.dist||'Patna',block:d.block||'Patna Sadar',sid:'pending',schoolName:d.schoolName||'School'};
             nk.pageTime=d.pageTime||nk.pageTime;nk.videoPts=d.videoPts||0;nk.theoryPts=d.theoryPts||0;
             ALL.kids.push(nk);save();
             ui.loginNotFound=false;ui.loginStep=1;ui.loginErr='';render();
           }else{
             ui.loginErr='Is number/email se koi account nahi mila. Pehle Sign Up karein.';ui.loginNotFound=true;render();
           }
-        }).catch(()=>{ui.loginErr='Network error. Dubara try karein ya Sign Up karein.';ui.loginNotFound=true;render();});
+        }).catch(err=>{ui.loginErr='Firebase check error: '+((err&&err.code)||'Network error')+'. Dubara try karein.';ui.loginNotFound=true;render();});
         return;
       }
       ui.loginErr='Is number/email se koi account nahi mila. Pehle Sign Up karein.';ui.loginNotFound=true;return render();
@@ -1971,7 +1976,7 @@ document.addEventListener('click',e=>{
     const pin=(ui.loginOtp||'').trim();
     if(!/^\d{4}$/.test(pin)){ui.loginErr='Apna 4-digit PIN daalein.';return render();}
     const m=(ui.loginMob||'').trim(), ml=m.toLowerCase();
-    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email===ml)));
+    const found=ALL.kids.find(k=>k.profile&&(k.profile.mobile===m||(k.profile.email&&k.profile.email.toLowerCase()===ml)));
     if(!found){ui.loginErr='Is number/email se koi account nahi mila. Pehle Sign Up karein.';ui.loginNotFound=true;ui.loginStep=0;return render();}
     if(found.profile.pin&&found.profile.pin!==pin){ui.loginErr='Galat PIN. Sahi 4-digit PIN daalein.';return render();}
     if(!found.profile.pin){found.profile.pin=pin;}
@@ -2021,7 +2026,7 @@ document.addEventListener('change',e=>{
   if(f==='dist'){ob.block='';ob.sid='';ob.sent=false}
   if(f==='block'){ob.sid='';ob.sent=false}
   if(f==='sid'&&e.target.value!=='none'){ob.sent=false}
-  if(!['name','mobile','loginMob','loginOtp','reqName','otp','email'].includes(f))render();
+  if(!['name','mobile','loginMob','loginOtp','reqName','otp','email','pin','fpPin','switchPin'].includes(f))render();
 });
 document.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset.f;if(f==='utr'){ui.utr=e.target.value;ui.uerr='';return}
   if(f==='loginMob'){ui.loginMob=e.target.value;ui.loginErr='';return}
