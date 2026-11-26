@@ -446,6 +446,7 @@ function logAuthAlert(type,contact,detail){
   try{if(_db)_db.collection('authAlerts').add({type,contact:String(contact||''),detail:String(detail||''),ts:Date.now()}).catch(()=>{});}catch(e){}
 }
 function claimActiveSession(){
+  try{localStorage.removeItem('gj-logged-out');}catch(ex){}
   if(!S||!S.profile)return;
   const sid=newSessionId();
   S.sessionId=sid;save();
@@ -467,7 +468,7 @@ function watchActiveSession(){
     const d=doc.data();
     if(d&&d.activeSession&&S.sessionId&&d.activeSession!==S.sessionId){
       if(_sessUnsub){try{_sessUnsub();}catch(e){}_sessUnsub=null;_sessDocId=null;}
-      ui.loggedOut=true;ui.authMode='login';ui.loginStep=0;ui.loginOtp='';
+      try{localStorage.setItem('gj-logged-out','1');}catch(ex){}ui.loggedOut=true;ui.authMode='login';ui.loginStep=0;ui.loginOtp='';
       ui.loginErr='Yeh account kisi doosre device par login ho gaya hai. Ek baar mein sirf 1 device par chalega.';
       render();
     }
@@ -802,7 +803,7 @@ if(!ALL.kids.length)ALL.kids=[blankKid('k1')];
 let S=ALL.kids.find(k=>k.id===ALL.active)||ALL.kids[0]; ALL.active=S.id;
 function save(){try{localStorage.setItem('vidya-sopan-v2',JSON.stringify(ALL))}catch(e){}}
 const dk=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-const ui={tab:'home',cls:null,subj:null,buyCourse:null,cMed:'all',cCls:'all',lang:'hi',authMode:'signup',loginMob:'',loginOtp:'',loginStep:0,loginErr:'',payMethod:'phonepe',payState:null,payTx:null,book:null,folder:null,cat:null,open:null,qOpenAt:0,chapPopup:null,picked:{},test:null,rec:'day',rlevel:'block',rmode:'students',edit:false,confirmReset:false};
+const ui={loggedOut:(function(){try{return localStorage.getItem('gj-logged-out')==='1';}catch(e){return false;}})(),tab:'home',cls:null,subj:null,buyCourse:null,cMed:'all',cCls:'all',lang:'hi',authMode:'signup',loginMob:'',loginOtp:'',loginStep:0,loginErr:'',payMethod:'phonepe',payState:null,payTx:null,book:null,folder:null,cat:null,open:null,qOpenAt:0,chapPopup:null,picked:{},test:null,rec:'day',rlevel:'block',rmode:'students',edit:false,confirmReset:false};
 const freshOb=em=>({name:'',mobile:'',board:'bihar',cls:'9',dist:'',block:'',sid:'',reqName:'',sent:false,consent:false,step:0,otp:'',email:em||'',err:''});
 let ob={name:'',mobile:'',board:'bihar',cls:'9',dist:'',block:'',sid:'',reqName:'',sent:false,consent:false,step:0,otp:'',email:'',err:''};
 
@@ -1966,10 +1967,10 @@ document.addEventListener('click',e=>{
           :_db.collection('students').where('email','==',ml).limit(1).get().then(snap=>snap.empty?fallbackScan():[snap.docs[0].data()]);
         qP.then(arr=>{
           if(arr&&arr.length){
-            const d=arr[0], nk=blankKid('k'+Date.now());
+            const d=arr[0], empty0=(ALL.kids.length===1&&!ALL.kids[0].profile)?ALL.kids[0]:null, nk=empty0||blankKid('k'+Date.now());
             nk.profile={name:d.name,mobile:d.mobile||(/^\d{10}$/.test(m)?m:''),email:(d.email||ml).toLowerCase(),pin:d.pin||'',board:(d.board==='CBSE'?'cbse':'bihar'),cls:+(d.cls||9),dist:d.dist||'Patna',block:d.block||'Patna Sadar',sid:'pending',schoolName:d.schoolName||'School'};
             nk.pageTime=d.pageTime||nk.pageTime;nk.videoPts=d.videoPts||0;nk.theoryPts=d.theoryPts||0;
-            ALL.kids.push(nk);save();
+            if(!empty0)ALL.kids.push(nk);save();
             ui.loginNotFound=false;ui.loginStep=1;ui.loginErr='';render();
           }else{
             logAuthAlert('not_found',m,'Account nahi mila');ui.loginErr='Is number/email se koi account nahi mila. Pehle Sign Up karein.';ui.loginNotFound=true;render();
@@ -2056,6 +2057,41 @@ document.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset
   if(['name','mobile','reqName','otp','email','pin'].includes(f)){ob[f]=(f==='otp'||f==='mobile'||f==='pin')?e.target.value.replace(/\D/g,''):e.target.value;ob.err=''}});
 
 let _t0=Date.now(), _lastSync=Date.now(), _dirtySync=false;
+function buildFbAnalytics(){
+  const sl=[], pb={};
+  const addPb=(sb,k,pts)=>{if(!pb[sb])pb[sb]={subj:sb,readPts:0,testPts:0,theoryPts:0,videoPts:0,total:0};pb[sb][k]+=pts;pb[sb].total+=pts;};
+  Object.entries(S.studied||{}).forEach(([sk,val])=>{
+    const ps=sk.split('|'), sb=ps[1]||'Study', ch=ps[2]||'Chapter 1', idx=+(ps[3]||0);
+    const pts=(typeof val==='number'?val:2);
+    const isTh=(S.theoryPtsBySub&&S.theoryPtsBySub[ps[0]+'|'+sb]&&ch.includes('theory'));
+    addPb(sb,isTh?'theoryPts':'readPts',pts);
+    sl.push({subj:sb,chapter:ch,source:'Study (पढ़ाई)',q:'Question #'+(idx+1),yourAns:'Completed',correctAns:'—',status:'correct',ok:true,pts,tag:pts>=4?'Long':'Short'});
+  });
+  Object.entries(S.theoryPtsBySub||{}).forEach(([k,pts])=>{
+    const sb=k.split('|')[1]||'Study';
+    addPb(sb,'theoryPts',pts);
+    sl.push({subj:sb,chapter:'Theory',source:'Chapter Theory (📘)',q:sb+' — Chapter Theory Read',yourAns:'Read',correctAns:'—',status:'correct',ok:true,pts,tag:'Theory'});
+  });
+  (S.videoLogs||[]).forEach(vl=>{
+    const sb=vl.subj||'Video';
+    const pts=(vl.mins||1)*2;
+    addPb(sb,'videoPts',pts);
+    sl.push({subj:sb,chapter:vl.chap||'Chapter',source:'Video Class (🎬)',q:vl.title||'Video Lecture ('+(vl.mins||1)+' min)',yourAns:'Watched '+(vl.mins||1)+' min',correctAns:'—',status:'correct',ok:true,pts,tag:'Video'});
+  });
+  (S.attempts||[]).forEach(at=>{
+    const sb=at.subj||'Test', net=(at.netPts!==undefined?at.netPts:(at.score||0));
+    addPb(sb,'testPts',net);
+    if(Array.isArray(at.det)){
+      at.det.forEach((d,i)=>{
+        const st=d.ok?'correct':(d.sk||d.sel===null||d.sel===undefined?'skipped':'wrong');
+        sl.push({subj:sb,chapter:at.chapter||'Chapter 1',source:'Test #'+(at.n||1),q:sb+' Test Q'+(i+1),yourAns:st==='skipped'?'Skipped':'Option '+'ABCD'[d.sel],correctAns:'—',status:st,ok:!!d.ok,pts:d.ok?1:0,tag:'MCQ'});
+      });
+    }else{
+      sl.push({subj:sb,chapter:at.chapter||'Chapter 1',source:'Test #'+(at.n||1),q:sb+' Test ('+(at.score||0)+'/'+(at.total||5)+')',yourAns:(at.score||0)+' right',correctAns:(at.total||5)+' total',status:(at.score||0)>0?'correct':'wrong',ok:(at.score||0)>0,pts:net,tag:'MCQ'});
+    }
+  });
+  return {solvedList:sl.slice(-80),pointsBreakdown:Object.values(pb).sort((a,b)=>b.total-a.total)};
+}
 function syncToServer(force){
   const now=Date.now();
   if(!_dirtySync&&!force)return;
@@ -2079,7 +2115,7 @@ function syncToServer(force){
         studiedN:Object.keys(S.studied||{}).length,attemptsN:(S.attempts||[]).length,
         unlocked:Object.keys(S.unlocked||{}),streakN:streak(),currentPage:mMap[ui.tab||'home']||'Home',
         pageTime:S.pageTime||{},dailyTime:S.dailyTime||{},subjTime:S.subjTime||{},
-        attempts:(S.attempts||[]).slice(-5).reverse(),lastSeen:now
+        ...buildFbAnalytics(),attempts:(S.attempts||[]).slice(-5).reverse(),lastSeen:now
       },{merge:true}).catch(()=>{});
     }
   }catch(e){}
