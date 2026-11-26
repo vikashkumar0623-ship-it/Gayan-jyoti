@@ -2078,9 +2078,10 @@ function buildFbAnalytics(){
     addPb(sb,'videoPts',pts);
     sl.push({subj:sb,chapter:vl.chap||'Chapter',source:'Video Class (🎬)',q:vl.title||'Video Lecture ('+(vl.mins||1)+' min)',yourAns:'Watched '+(vl.mins||1)+' min',correctAns:'—',status:'correct',ok:true,pts,tag:'Video'});
   });
+  const latestTestBySub={};
   (S.attempts||[]).forEach(at=>{
     const sb=at.subj||'Test', net=(at.netPts!==undefined?at.netPts:(at.score||0));
-    addPb(sb,'testPts',net);
+    latestTestBySub[sb]=net;
     if(Array.isArray(at.det)){
       at.det.forEach((d,i)=>{
         const st=d.ok?'correct':(d.sk||d.sel===null||d.sel===undefined?'skipped':'wrong');
@@ -2090,6 +2091,7 @@ function buildFbAnalytics(){
       sl.push({subj:sb,chapter:at.chapter||'Chapter 1',source:'Test #'+(at.n||1),q:sb+' Test ('+(at.score||0)+'/'+(at.total||5)+')',yourAns:(at.score||0)+' right',correctAns:(at.total||5)+' total',status:(at.score||0)>0?'correct':'wrong',ok:(at.score||0)>0,pts:net,tag:'MCQ'});
     }
   });
+  Object.entries(latestTestBySub).forEach(([sb,net])=>addPb(sb,'testPts',net));
   return {solvedList:sl.slice(-80),pointsBreakdown:Object.values(pb).sort((a,b)=>b.total-a.total)};
 }
 function syncToServer(force){
