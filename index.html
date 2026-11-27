@@ -1220,7 +1220,7 @@ function viewStudy(){
   const directOrAll=(subFlds.length&&!(curFl.items||[]).length)?[]:(subFlds.length?(curFl.items||[]):collectFolderItems(curFl));
 
   if(!ui.cat){
-    const subHtml=subFlds.length?`<section><h3>📁 Sub-folders (${subFlds.length})</h3><div class="grid cv">${subFlds.map(sf=>{
+    const subHtml=subFlds.length?`<section><div class="grid cv">${subFlds.map(sf=>{
       const cnt=collectFolderItems(sf).length, bg=sf.cover?`background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${sf.cover}) center/cover no-repeat`:'';
       return `<button class="cover" style="${bg}" data-act="opensub" data-v="${esc(sf.id)}"><span class="mo" aria-hidden="true">📁</span><span class="bd">${esc(curFl.name)}</span><span class="ti">${esc(sf.name)}</span><span class="ft num">${cnt} items${(sf.folders||[]).length?' · '+(sf.folders||[]).length+' folders':''}</span></button>`;
     }).join('')}</div></section>`:'';
@@ -1780,10 +1780,11 @@ document.addEventListener('click',e=>{
   if(a==='subj'){ui.subj=v;ui.book=null;ui.folder=null;ui.cat=null;ui.open=null;ui.anim=true;return render()}
   if(a==='book'){ui.book=v;ui.folder=null;ui.cat=null;ui.open=null;ui.anim=true;return render()}
   if(a==='backbook'){ui.book=null;ui.folder=null;ui.cat=null;ui.open=null;return render()}
-  if(a==='folder'){ui.folder=v;ui.cat=null;ui.payStep=0;ui.payState=null;ui.open=null;ui.anim=true;return render()}
+  if(a==='folder'){ui.folder=v;ui.subPath=[];ui.cat=null;ui.payStep=0;ui.payState=null;ui.open=null;ui.anim=true;return render()}
+  if(a==='opensub'){ui.subPath=[...(ui.subPath||[]),v];ui.cat=null;ui.open=null;ui.anim=true;return render()}
   if(a==='cat'){ui.cat=v;ui.open=null;ui.anim=true;return render()}
   if(a==='backcat'){awardStudyTime();ui.cat=null;ui.open=null;ui.qOpenAt=0;return render()}
-    if(a==='backfolder'){if(b.dataset.finish){ui.payState=null;return render();}ui.folder=null;ui.cat=null;ui.open=null;ui.payState=null;return render()}
+    if(a==='backfolder'){if(b.dataset.finish){ui.payState=null;return render();}if(ui.subPath&&ui.subPath.length){ui.subPath.pop();return render();}ui.folder=null;ui.subPath=[];ui.cat=null;ui.open=null;ui.payState=null;ui.payStep=0;return render()}
   if(a==='startpay'){ui.payStep=1;return render()}
   if(a==='backpay'){ui.payStep=0;return render()}
   if(a==='copyupi'){
