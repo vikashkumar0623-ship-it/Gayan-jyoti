@@ -1182,7 +1182,7 @@ function viewStudy(){
 
   if(!ui.book){
     return `<section><button class="link" data-act="back">‹ All subjects</button><h2>${esc(s.name)}</h2><p class="muted">Select your book (किताब चुनें)</p></section>
-    <section><div class="grid cv">${BOOKS.filter(bk=>s.folders.some(f=>(f.book||'bseb')===bk.id)).map(bk=>{
+    <section><div class="grid cv">${BOOKS.filter(bk=>(!ADM||!ADM.uiControls||!ADM.uiControls.books||ADM.uiControls.books[bk.id]!==false)&&s.folders.some(f=>(f.book||'bseb')===bk.id)).map(bk=>{
       const bFolders=s.folders.filter(f=>(f.book||'bseb')===bk.id);
       const allItems=bFolders.reduce((a,f)=>a.concat(collectFolderItems(f).map((_,idx)=>({f,idx}))),[]);
       const total=Math.max(1,allItems.length);
@@ -1216,7 +1216,7 @@ function viewStudy(){
   if(!ui.cat){
     const allItems=collectFolderItems(fl);
     return `<section><button class="link" data-act="backfolder">‹ ${esc(bkObj.name)} chapters</button><h2>${esc(fl.name)}</h2><p class="muted">${esc(s.name)} · ${esc(bkObj.name)}</p></section>
-    <section><div class="grid cv">${CATS.map(c=>{
+    <section><div class="grid cv">${CATS.filter(c=>!ADM||!ADM.uiControls||!ADM.uiControls.cats||ADM.uiControls.cats[c.id]!==false).map(c=>{
       const catItems=allItems.map((it,idx)=>({it,idx})).filter(({it})=>normCat(it.type||'mcq')===c.id);
       const total=Math.max(1,catItems.length);
       const read=catItems.filter(({idx})=>S.studied[cls+'|'+s.id+'|'+fl.id+'|'+idx]).length;
@@ -1493,6 +1493,14 @@ function viewTest(){
   if(t&&t.stage==='run')return viewRun(t);
   if(t&&t.stage==='done')return viewResult(t.att);
   return `<section><h2>Daily Test</h2><p class="muted">5 questions per subject (MCQ, Tick, Match, Fill in the blanks). <b>+1 pt</b> per correct answer. Re-attempt removes previous points of this test and adds the new score (whether higher or lower).</p></section>
+  ${(()=>{
+    const admDts=(ADM&&Array.isArray(ADM.dailyTests)?ADM.dailyTests:[]).filter(dt=>dt.board===p.board&&+dt.cls===+p.cls&&Array.isArray(dt.qs)&&dt.qs.length);
+    if(!admDts.length)return '';
+    return `<section><h3>📝 Teacher Daily Tests</h3><div class="grid">${admDts.map(dt=>{
+      const ta=S.attempts.filter(a=>a.d===today&&a.cls===p.cls&&a.subj===dt.title), r=ta.length?Math.max(...ta.map(a=>a.score)):null;
+      return `<button class="folder ${ta.length?'done':''}" data-act="tstartadm" data-v="${esc(dt.id)}"><span class="g" style="background:var(--primary);color:#fff">📝</span><span class="t"><b>${esc(dt.title)}</b><span class="num">${esc(dt.subj)} · ${dt.qs.length} Qs${ta.length?' · best '+r+'/'+dt.qs.length:''}</span></span></button>`;
+    }).join('')}</div></section>`;
+  })()}
   <section><div class="grid">${subjectsFor(p.cls).map(s=>{const ta=S.attempts.filter(a=>a.d===today&&a.cls===p.cls&&a.subj===s),r=ta.length?Math.max(...ta.map(a=>a.score)):null;
     return `<button class="folder ${ta.length?'done':''}" data-act="tstart" data-v="${esc(s)}"><span class="g" style="background:${CV[s]};color:#fff">${subjIcon(s)}</span><span class="t"><b>${SUBJ_EN[s]}</b><span class="num">${ta.length?ta.length+(ta.length>1?' attempts':' attempt')+' · best '+r+'/5':'Not taken today'}</span></span></button>`}).join('')}</div></section>`;
 }
@@ -1875,6 +1883,13 @@ document.addEventListener('click',e=>{
     const cls=p.cls,i=+b.dataset.i,key=cls+'|'+ui.subj+'|'+i;
     if(ui.picked[key]===undefined){ui.picked[key]=a==='opt'?+b.dataset.o:-1}
     if(!S.studied[key]){S.studied[key]=1;S.studiedOn[key]=dk();markDay();save()}
+    return render();
+  }
+  if(a==='tstartadm'){
+    const dt=(ADM&&Array.isArray(ADM.dailyTests)?ADM.dailyTests:[]).find(x=>x.id===v);
+    if(!dt||!dt.qs||!dt.qs.length)return;
+    const qs=dt.qs.map((q,idx)=>({q:q.q,o:q.o,a:q.a,e:q.e||'',t:'mcq'}));
+    ui.test={stage:'run',subj:dt.title,qs,i:0,ans:Array(qs.length).fill(null),at:Date.now()};
     return render();
   }
   if(a==='tstart'){
