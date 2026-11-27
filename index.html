@@ -76,7 +76,7 @@ h3{font-family:var(--display);font-weight:700;font-size:1.1rem;line-height:1.4}
 /* bottom nav */
 nav{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:2px solid var(--line);border-radius:24px 24px 0 0;
   padding:8px max(10px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}
-nav .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr);gap:2px}
+nav .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:2px}
 nav button{background:none;border:0;border-radius:16px;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.68rem;font-weight:700;color:var(--muted);padding:0 2px}
 nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 nav button[aria-current="page"]{color:var(--on-primary);background:var(--primary);box-shadow:0 3px 0 var(--primary-d)}
@@ -859,7 +859,7 @@ function canTopBack(){
 }
 function shell(body,withNav){
   const p=S.profile, cb=canTopBack();
-  const tabs=[['home','Home'],['study','Study'],['course','Course'],['test','Test'],['rank','Rank'],['me','Profile']];
+  const tabs=[['home','Home'],['study','Study'],['test','Test'],['rank','Rank'],['me','Profile']];
   return `<div class="wrap"><header class="top"><div style="justify-self:start"><button class="topback" data-act="topback" aria-label="Back" ${cb?'':'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/><path d="M10 12h9"/></svg></button></div><div class="logo" style="justify-self:center">${LOGO}<span>Gayan Jyoti</span></div><div style="justify-self:end">${p?`<span class="pill num">${ic("star")}${myPts()} pts</span>`:''}</div></header><main>${body}</main></div>`+
   (withNav?`<nav aria-label="Main menu"><div class="in">${tabs.map(([k,l])=>`<button data-act="tab" data-v="${k}" ${ui.tab===k?'aria-current="page"':''}>${ICON[k]}<span>${l}</span></button>`).join('')}</div></nav>`:'');
 }
@@ -981,6 +981,13 @@ function viewHome(){
   const pending=p.sid==='pending';
   return `<section class="hero"><div class="hr">${avatar(p)}<div style="min-width:0"><p class="hi">Hello,</p><h2>${esc(p.name)}</h2><p class="sub">Class ${p.cls} · ${BOARDS[p.board]} · ${esc(p.block)}, ${esc(p.dist)}</p></div></div>
    <div class="hs num"><div class="t1">${ic('star')}<b>${myPts()}</b><span>Points</span></div><div class="t2">${ic('flame')}<b>${streak()}</b><span>Day streak</span></div><div class="t3">${ic('target')}<b>${S.attempts.length}</b><span>Attempts</span></div><div class="t4">${ic('book')}<b>${studiedN}</b><span>Questions read</span></div></div></section>
+  ${(()=>{
+    const bList=(typeof allCoursesList==='function'?allCoursesList(p.board):[]).filter(c=>+c.cls===+p.cls);
+    const showList=bList.length?bList:(typeof allCoursesList==='function'?allCoursesList(p.board).slice(0,4):[]);
+    if(!showList.length)return '';
+    const chips=showList.map(c=>`<button type="button" data-act="openbatch" data-v="${esc(c.id)}" style="flex:none;background:linear-gradient(135deg,#1D4ED8,#0EA5E9);color:#fff;border:0;border-radius:12px;padding:7px 12px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">🚀 ${esc(c.title)} · ${c.paid?'₹'+c.price:'Free'} ›</button>`).join('');
+    return `<section><div class="card" style="padding:8px 10px;overflow:hidden;border-color:#0EA5E9;background:var(--soft)"><div style="font-size:.72rem;font-weight:800;color:var(--primary);margin-bottom:5px">🔥 NEW LAUNCHED BATCHES (Tap to View)</div><div style="overflow:hidden;width:100%"><div style="display:flex;gap:8px;width:max-content;animation:batchScroll 18s linear infinite">${chips}${chips}</div></div></div></section>`;
+  })()}
   ${stairsHTML(p,pending)}
   <section><h3>Your school</h3>
    <div class="card" style="display:flex;flex-direction:column;gap:10px">
@@ -1032,7 +1039,8 @@ const CATS=[
   {id:'short',name:'Short Question',icon:'✍️'},
   {id:'theory',name:'Chapter Theory',icon:'📘'},
   {id:'long',name:'Long Question',icon:'📖'},
-  {id:'video',name:'Video Class',icon:'🎬'}
+  {id:'video',name:'Video Class',icon:'🎬'},
+  {id:'pdf',name:'PDF Notes',icon:'📄'}
 ];
 const EXTRA_BANK={
   "हिंदी":{
@@ -1049,7 +1057,7 @@ const EXTRA_BANK={
     ]
   }
 };
-function normCat(t){if(t==='tick')return 'tick';if(t==='short'||t==='oneliner')return 'short';if(t==='theory')return 'theory';if(t==='long'||t==='book')return 'long';if(t==='video')return 'video';return 'mcq';}
+function normCat(t){if(t==='tick')return 'tick';if(t==='short'||t==='oneliner')return 'short';if(t==='theory')return 'theory';if(t==='long'||t==='book')return 'long';if(t==='video')return 'video';if(t==='pdf')return 'pdf';return 'mcq';}
 function ytEmbedUrl(u){
   const m=String(u||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{6,})/);
   return m?('https://www.youtube-nocookie.com/embed/'+m[1]+'?rel=0&modestbranding=1&iv_load_policy=3&playsinline=1'):null;
@@ -1152,11 +1160,11 @@ function awardStudyTime(){
 }
 function viewStudy(){
   const p=S.profile, cls=p.cls, admSubs=admSubjectsFor(p.board,cls);
-  const subsList=admSubs?admSubs.map(s=>({id:s.id,name:s.name,cover:s.cover||'',folders:s.folders||[],isAdm:true})):subjectsFor(cls).map(s=>({id:s,name:SUBJ_EN[s]||s,raw:s,cover:'',folders:builtinChapters(s),isAdm:false}));
+  const subsList=admSubs?admSubs.map(s=>({id:s.id,name:s.name,cover:s.cover||'',folders:s.folders||[],isAdm:true})):[];
 
   if(!ui.subj){
     return `<section><h2>Study folders</h2><p class="muted">Class ${cls} · ${BOARDS[p.board]} · all subjects</p></section>
-    <section><div class="grid cv">${subsList.map(s=>{
+    <section>${subsList.length?`<div class="grid cv">${subsList.map(s=>{
       const allItems=s.folders.reduce((a,f)=>a.concat(collectFolderItems(f).map((_,idx)=>({f,idx}))),[]);
       const total=Math.max(1,allItems.length);
       const read=allItems.filter(({f,idx})=>S.studied[cls+'|'+s.id+'|'+f.id+'|'+idx]).length;
@@ -1166,7 +1174,7 @@ function viewStudy(){
       }
       const bgStyle=s.cover?`background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${s.cover}) center/cover no-repeat;--p:${pct}%`:`--p:${pct}%`;
       return `<button class="cover" style="${bgStyle}" data-act="subj" data-v="${esc(s.id)}"><span class="mo" aria-hidden="true">${s.cover?'📁':esc((s.name||'S')[0])}</span><span class="bd">${s.folders.length} chapters</span><span class="ti">${esc(s.name)}</span><span class="ft num">${allItems.length?read+'/'+allItems.length+' read':'Empty'}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
-    }).join('')}</div></section>`;
+    }).join('')}</div>`:`<div class="card"><p class="muted">Abhi Class ${cls} (${BOARDS[p.board]}) ke liye Admin Panel se koi subject / folder add nahi hua hai.</p></div>`}</section>`;
   }
 
   const s=subsList.find(x=>x.id===ui.subj);
@@ -1174,7 +1182,7 @@ function viewStudy(){
 
   if(!ui.book){
     return `<section><button class="link" data-act="back">‹ All subjects</button><h2>${esc(s.name)}</h2><p class="muted">Select your book (किताब चुनें)</p></section>
-    <section><div class="grid cv">${BOOKS.map(bk=>{
+    <section><div class="grid cv">${BOOKS.filter(bk=>s.folders.some(f=>(f.book||'bseb')===bk.id)).map(bk=>{
       const bFolders=s.folders.filter(f=>(f.book||'bseb')===bk.id);
       const allItems=bFolders.reduce((a,f)=>a.concat(collectFolderItems(f).map((_,idx)=>({f,idx}))),[]);
       const total=Math.max(1,allItems.length);
@@ -1253,6 +1261,9 @@ function viewStudy(){
     }else if(mt==='short'){
       const nxt=catItems[dispIdx+1]?catItems[dispIdx+1].idx:-1;
       inner=`<div class="one" style="white-space:pre-line"><b>Short Answer (${esc(bkObj.name)}):</b> ${esc(it.ans)}</div>${twoBtns(nxt)}`;
+    }else if(mt==='pdf'){
+      const pUrl=it.pdfUrl||it.videoUrl||'';
+      inner=`<div class="card" style="text-align:center;gap:10px;background:var(--soft)"><div style="font-size:2.4rem">📄</div><h3>${esc(it.q)}</h3>${it.ans?`<p class="muted small" style="white-space:pre-line">${esc(it.ans)}</p>`:''}${pUrl?`<a class="btn block" style="text-decoration:none;display:flex;align-items:center;justify-content:center" href="${esc(pUrl)}" download="${esc(it.q||'notes')}.pdf" target="_blank" rel="noopener">📥 Download / Open PDF ›</a>`:'<p class="muted small">PDF link available nahi hai.</p>'}</div>`;
     }else if(mt==='video'){
       const em=ytEmbedUrl(it.videoUrl);
       const player=em?`<div class="vid-wrap" style="position:relative;padding-top:56.25%;border-radius:14px;overflow:hidden;background:#000;user-select:none;-webkit-user-select:none"><iframe src="${esc(em)}" title="${esc(it.q)}" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe><div aria-hidden="true" style="position:absolute;top:0;left:0;right:0;height:54px;z-index:3;background:transparent"></div><div aria-hidden="true" style="position:absolute;top:54px;bottom:44px;right:0;width:64px;z-index:3;background:transparent"></div><div aria-hidden="true" style="position:absolute;bottom:44px;left:0;width:65%;height:92px;z-index:3;background:transparent"></div><div aria-hidden="true" style="position:absolute;bottom:0;right:42px;width:105px;height:42px;z-index:3;background:transparent"></div></div>`:(it.videoUrl?`<video class="vid-wrap" controls controlsList="nodownload" disablePictureInPicture playsinline style="width:100%;border-radius:14px;background:#000" src="${esc(it.videoUrl)}"></video>`:'');
@@ -1506,6 +1517,51 @@ function podiumHTML(list){
   const t=[[list[1],2],[list[0],1],[list[2],3]];
   return `<div class="podium" role="list" aria-label="Top 3">${t.map(([x,r])=>`<div class="pc r${r}${x.me?' me':''}" role="listitem">${r===1?CROWN:''}<span class="medal">${r}</span><b>${esc(x.name)}${x.me?' (You)':''}</b><span class="sc num">${x.pts} pts</span><span class="stand" aria-hidden="true"></span></div>`).join('')}</div>`;
 }
+function tharWelcomeHTML(top1,isMe,scopeName){
+  if(!top1)return '';
+  const ini=(top1.name||'1').trim().slice(0,1).toUpperCase();
+  return `<section><div class="card" style="background:linear-gradient(135deg,#0F172A 0%,#1E3A8A 55%,#B45309 100%);color:#fff;border-color:#F59E0B;text-align:center;padding:14px 12px;overflow:hidden;position:relative">
+   <div style="font-size:.78rem;font-weight:800;letter-spacing:.6px;color:#FDE047;text-transform:uppercase">${isMe?'🎉 Grand Welcome · Aap Hain Topper! 🎉':'👑 Rank #1 Champion Welcome'}</div>
+   <h3 style="color:#fff;font-size:1.18rem;margin:2px 0 4px">${esc(top1.name)} ${isMe?'(You!)':''}</h3>
+   <p style="font-size:.82rem;opacity:.92;margin-bottom:6px">${esc(scopeName)} · <b>${top1.pts} pts</b></p>
+   <svg viewBox="0 0 320 155" style="width:100%;max-width:300px;margin:0 auto;display:block" aria-hidden="true">
+    <circle cx="34" cy="24" r="3" fill="#FDE047"/><circle cx="62" cy="14" r="2.5" fill="#FB7185"/><circle cx="268" cy="20" r="3" fill="#34D399"/><circle cx="292" cy="36" r="2.5" fill="#FDE047"/><circle cx="48" cy="46" r="2" fill="#38BDF8"/><circle cx="276" cy="52" r="2.5" fill="#F472B6"/>
+    <!-- Champion sitting on Thar roof with Haar (garland) & Crown -->
+    <g transform="translate(132,6)">
+     <path d="M18 14 L22 4 L28 11 L34 4 L38 14 Z" fill="#FACC15" stroke="#B45309" stroke-width="1.2"/>
+     <circle cx="28" cy="24" r="11" fill="#FDBA74" stroke="#7C2D12" stroke-width="1.3"/>
+     <path d="M17 22 Q28 11 39 22 Q36 14 28 14 Q20 14 17 22 Z" fill="#1E293B"/>
+     <circle cx="24" cy="24" r="1.4" fill="#1E293B"/><circle cx="32" cy="24" r="1.4" fill="#1E293B"/>
+     <path d="M24 28 Q28 32 32 28" fill="none" stroke="#7C2D12" stroke-width="1.4" stroke-linecap="round"/>
+     <rect x="15" y="35" width="26" height="22" rx="7" fill="#2563EB" stroke="#1E3A8A" stroke-width="1.3"/>
+     <text x="28" y="49" text-anchor="middle" font-size="9" font-weight="800" fill="#fff">${esc(ini)}</text>
+     <!-- Flower Garland (Haar) around neck -->
+     <path d="M18 35 Q28 53 38 35" fill="none" stroke="#F97316" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="1 4.2"/>
+     <path d="M18 35 Q28 53 38 35" fill="none" stroke="#FACC15" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 5.2"/>
+     <!-- Raised waving arms -->
+     <path d="M15 39 L5 26" stroke="#FDBA74" stroke-width="4" stroke-linecap="round"/>
+     <path d="M41 39 L51 26" stroke="#FDBA74" stroke-width="4" stroke-linecap="round"/>
+    </g>
+    <!-- Black Thar 4x4 Body -->
+    <ellipse cx="160" cy="142" rx="112" ry="7" fill="rgba(0,0,0,0.38)"/>
+    <rect x="78" y="58" width="134" height="34" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1.5"/>
+    <rect x="88" y="64" width="38" height="22" rx="4" fill="#93C5FD" opacity=".85"/>
+    <rect x="134" y="64" width="66" height="22" rx="4" fill="#93C5FD" opacity=".85"/>
+    <rect x="64" y="88" width="194" height="36" rx="9" fill="#0F172A" stroke="#334155" stroke-width="1.8"/>
+    <!-- Front Grille & Headlight -->
+    <rect x="248" y="93" width="12" height="24" rx="3" fill="#334155"/>
+    <circle cx="254" cy="100" r="4.5" fill="#FEF08A" stroke="#F59E0B" stroke-width="1.2"/>
+    <rect x="52" y="92" width="13" height="28" rx="4" fill="#334155" stroke="#475569" stroke-width="1.2"/>
+    <!-- Bumper -->
+    <rect x="58" y="118" width="206" height="8" rx="4" fill="#334155"/>
+    <!-- Wheels -->
+    <g><circle cx="104" cy="126" r="18" fill="#090D16" stroke="#475569" stroke-width="3"/><circle cx="104" cy="126" r="8" fill="#94A3B8"/><circle cx="104" cy="126" r="3" fill="#0F172A"/></g>
+    <g><circle cx="218" cy="126" r="18" fill="#090D16" stroke="#475569" stroke-width="3"/><circle cx="218" cy="126" r="8" fill="#94A3B8"/><circle cx="218" cy="126" r="3" fill="#0F172A"/></g>
+    <!-- Number Plate -->
+    <rect x="142" y="102" width="44" height="12" rx="3" fill="#FACC15"/><text x="164" y="111" text-anchor="middle" font-size="7" font-weight="800" fill="#0F172A">RANK #1</text>
+   </svg>
+  </div></section>`;
+}
 function viewRank(){
   const p=S.profile, pend=p.sid==='pending', L=(pend&&ui.rlevel==='school')?'block':ui.rlevel;
   const levels=(pend?[]:[['school','School']]).concat([['block','Block'],['district','District'],['state','State']]);
@@ -1526,6 +1582,7 @@ function viewRank(){
   }
   return `<section><h2>Ranking</h2><p class="muted small">Among Class ${p.cls} · ${BOARDS[p.board]} students</p>
    <div class="seg" role="group" aria-label="Level">${levels.map(([k,l])=>`<button data-act="rlevel" data-v="${k}" aria-pressed="${L===k}">${l}</button>`).join('')}</div></section>
+  ${tharWelcomeHTML(list[0],my===0,scopeName)}
   <section><div class="card mine"><div><p class="muted small">Your position in ${esc(scopeName)}</p><div class="big num">#${my+1}</div></div><p class="muted num" style="text-align:right">of ${total} students<br>${myPts()} pts</p></div></section>
   <section>
    <h3>${showSchools?'Top schools (average points)':'Top '+N+' students'}</h3>
@@ -1573,11 +1630,13 @@ function recordHTML(){
 }
 
 function studentsHTML(){
-  const kids=ALL.kids.filter(k=>k.profile); if(!ALL.parent||!kids.length)return '';
-  return `<section><h3>Students under this parent</h3>
-   <div class="card" style="display:flex;flex-direction:column;gap:6px"><p class="small">Parent: <b>${esc(maskEmail(ALL.parent.email))}</b></p>
-   <div class="rows">${kids.map(k=>`<div class="row" style="grid-template-columns:44px minmax(0,1fr) auto">${avatar(k.profile,'sm')}<span class="nm"><b>${esc(k.profile.name)}</b><span>Class ${k.profile.cls} · ${BOARDS[k.profile.board]}</span></span>${k.id===S.id?`<button class="btn ghost" style="min-height:36px;padding:0 10px;font-size:.78rem" data-act="togglepinlock">${S.profile.pinLock!==false?'🔒 Lock ON':'🔓 Lock OFF'}</button>`:`<button class="btn ghost" style="min-height:40px;padding:0 14px" data-act="switch" data-v="${esc(k.id)}">${(k.profile.pin&&k.profile.pinLock!==false)?'🔒 Switch':'Switch'}</button>`}</div>`).join('')}</div>
-   ${kids.length<5?'<button class="btn" data-act="addkid">+ Add another student</button>':'<p class="small">Up to 5 students per parent.</p>'}</div></section>`}
+  const p=S.profile;if(!p)return '';
+  return `<section><h3>🎓 Courses &amp; Batches</h3>
+   <div class="card" style="display:flex;flex-direction:column;gap:8px">
+    <p class="muted small">Class ${p.cls} (${BOARDS[p.board]}) aur sabhi classes ke Hindi / English Medium courses aur Free Demo dekhein.</p>
+    <button class="btn" data-act="tab" data-v="course">Open Courses &amp; Batches ›</button>
+   </div></section>`;
+}
 function syllabusProgressHTML(p){
   const cls=p.cls, admSubs=admSubjectsFor(p.board,cls);
   const subsList=admSubs?admSubs.map(s=>({id:s.id,name:s.name,folders:s.folders||[]})):subjectsFor(cls).map(s=>({id:s,name:SUBJ_EN[s]||s,folders:builtinChapters(s)}));
@@ -1644,6 +1703,7 @@ function paint(){
 function render(){
   const app=$('#app');
   if(!S.profile||ui.loggedOut){const savedP=S.profile;if(ui.loggedOut)S.profile=null;app.innerHTML=shell(viewOnboard(),false);if(ui.loggedOut)S.profile=savedP;paint();return}
+  if(ui.edit){app.innerHTML=shell(viewOnboard(),false);paint();return}
   if(ui.tab==='test'&&ui.test&&ui.test.stage==='run'){app.innerHTML=`<div class="wrap">${viewTest()}</div>`;paint();ui.anim=false;return}
   const v={home:viewHome,study:viewStudy,course:viewCourse,test:viewTest,rank:viewRank,me:viewMe}[ui.tab]||viewHome;
   const _newUn=findNewlyUnlocked();
@@ -1735,6 +1795,7 @@ document.addEventListener('click',e=>{
   }
   if(a==='ccls'){ui.cCls=v;return render()}
   if(a==='cmed'){ui.cMed=v;return render()}
+  if(a==='openbatch'){ui.tab='course';ui.buyCourse=v;ui.payState=null;ui.payStep=0;ui.uerr='';return render()}
   if(a==='buycourse'){ui.buyCourse=v;ui.payState=null;ui.payStep=0;ui.uerr='';return render()}
   if(a==='backcourse'){ui.buyCourse=null;ui.payState=null;ui.payStep=0;ui.uerr='';return render()}
   if(a==='autounlockc'){S.unlocked=S.unlocked||{};S.unlocked[v]=true;ui.buyCourse=null;save();return render()}
@@ -1844,7 +1905,7 @@ document.addEventListener('click',e=>{
   if(a==='rlevel'){ui.rlevel=v;return render()}
   if(a==='hstep'){ui.hlevel=v;return render()}
   if(a==='rec'){ui.rec=v;return render()}
-  if(a==='edit'){ob={name:p.name,mobile:p.mobile||'',email:p.email||'',board:p.board,cls:String(p.cls),dist:p.dist,block:p.block,sid:p.sid==='pending'?'none':p.sid,reqName:p.sid==='pending'?p.schoolName:'',sent:p.sid==='pending',email:(S.consent&&S.consent.email)||'',consent:!!S.consent,step:S.consent?2:0,otp:'',err:''};ui.edit=true;return render()}
+  if(a==='edit'){ob={name:p.name,mobile:p.mobile||'',email:p.email||(S.consent&&S.consent.email)||'',pin:p.pin||'',board:p.board,cls:String(p.cls),dist:p.dist,block:p.block,sid:p.sid==='pending'?'none':p.sid,reqName:p.sid==='pending'?p.schoolName:'',sent:p.sid==='pending',consent:!!S.consent,step:S.consent?2:0,otp:'',err:''};ui.edit=true;return render()}
   if(a==='canceledit'){ui.edit=false;return render()}
   if(a==='sendreq'){
     if(!ob.reqName.trim()){ob.err='Enter the school name.';return render()}
