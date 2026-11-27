@@ -1225,7 +1225,7 @@ function viewStudy(){
       return `<button class="cover" style="${bg}" data-act="opensub" data-v="${esc(sf.id)}"><span class="mo" aria-hidden="true">📁</span><span class="bd">${esc(curFl.name)}</span><span class="ti">${esc(sf.name)}</span><span class="ft num">${cnt} items${(sf.folders||[]).length?' · '+(sf.folders||[]).length+' folders':''}</span></button>`;
     }).join('')}</div></section>`:'';
     const allItems=subFlds.length?(curFl.items||[]):collectFolderItems(curFl);
-    const catHtml=(!subFlds.length||allItems.length)?`<section><div class="grid cv">${CATS.filter(c=>!ADM||!ADM.uiControls||!ADM.uiControls.cats||ADM.uiControls.cats[c.id]!==false).map(c=>{
+    const catHtml=(!subFlds.length||allItems.length)?`<section><div class="grid cv">${CATS.filter(c=>(!ADM||!ADM.uiControls||!ADM.uiControls.cats||ADM.uiControls.cats[c.id]!==false)&&!(curFl.hiddenCats&&curFl.hiddenCats[c.id])).map(c=>{
       const catItems=allItems.map((it,idx)=>({it,idx})).filter(({it})=>normCat(it.type||'mcq')===c.id);
       const total=Math.max(1,catItems.length);
       const read=catItems.filter(({idx})=>S.studied[cls+'|'+s.id+'|'+curFl.id+'|'+idx]).length;
