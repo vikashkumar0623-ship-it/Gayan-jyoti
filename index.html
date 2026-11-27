@@ -797,7 +797,7 @@ if(!ALL.kids.length)ALL.kids=[blankKid('k1')];
 let S=ALL.kids.find(k=>k.id===ALL.active)||ALL.kids[0]; ALL.active=S.id;
 function save(){try{localStorage.setItem('vidya-sopan-v2',JSON.stringify(ALL))}catch(e){}}
 const dk=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-const ui={loggedOut:(function(){try{return localStorage.getItem('gj-logged-out')==='1';}catch(e){return false;}})(),tab:'home',cls:null,subj:null,buyCourse:null,cMed:'all',cCls:'all',lang:'hi',authMode:'signup',loginMob:'',loginOtp:'',loginStep:0,loginErr:'',payMethod:'phonepe',payState:null,payTx:null,book:null,folder:null,cat:null,open:null,qOpenAt:0,chapPopup:null,picked:{},test:null,rec:'day',rlevel:'block',rmode:'students',edit:false,confirmReset:false};
+const ui={loggedOut:(function(){try{return localStorage.getItem('gj-logged-out')==='1';}catch(e){return false;}})(),tab:'home',cls:null,subj:null,buyCourse:null,cMed:'all',cCls:'all',lang:'hi',authMode:'signup',loginMob:'',loginOtp:'',loginStep:0,loginErr:'',payMethod:'phonepe',payState:null,payTx:null,book:null,folder:null,subPath:[],cat:null,open:null,qOpenAt:0,chapPopup:null,picked:{},test:null,rec:'day',rlevel:'block',rmode:'students',edit:false,confirmReset:false};
 const freshOb=em=>({name:'',mobile:'',board:'bihar',cls:'9',dist:'',block:'',sid:'',reqName:'',sent:false,consent:false,step:0,otp:'',email:em||'',err:''});
 let ob={name:'',mobile:'',board:'bihar',cls:'9',dist:'',block:'',sid:'',reqName:'',sent:false,consent:false,step:0,otp:'',email:'',err:''};
 
@@ -1040,6 +1040,7 @@ const CATS=[
   {id:'theory',name:'Chapter Theory',icon:'📘'},
   {id:'long',name:'Long Question',icon:'📖'},
   {id:'video',name:'Video Class',icon:'🎬'},
+  {id:'match',name:'Match the Following',icon:'🔗'},
   {id:'pdf',name:'PDF Notes',icon:'📄'}
 ];
 const EXTRA_BANK={
@@ -1057,7 +1058,7 @@ const EXTRA_BANK={
     ]
   }
 };
-function normCat(t){if(t==='tick')return 'tick';if(t==='short'||t==='oneliner')return 'short';if(t==='theory')return 'theory';if(t==='long'||t==='book')return 'long';if(t==='video')return 'video';if(t==='pdf')return 'pdf';return 'mcq';}
+function normCat(t){if(t==='tick')return 'tick';if(t==='short'||t==='oneliner')return 'short';if(t==='theory')return 'theory';if(t==='long'||t==='book')return 'long';if(t==='video')return 'video';if(t==='match')return 'match';if(t==='pdf')return 'pdf';return 'mcq';}
 function ytEmbedUrl(u){
   const m=String(u||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{6,})/);
   return m?('https://www.youtube-nocookie.com/embed/'+m[1]+'?rel=0&modestbranding=1&iv_load_policy=3&playsinline=1'):null;
@@ -1174,7 +1175,7 @@ function viewStudy(){
       }
       const bgStyle=s.cover?`background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${s.cover}) center/cover no-repeat;--p:${pct}%`:`--p:${pct}%`;
       return `<button class="cover" style="${bgStyle}" data-act="subj" data-v="${esc(s.id)}"><span class="mo" aria-hidden="true">${s.cover?'📁':esc((s.name||'S')[0])}</span><span class="bd">${s.folders.length} chapters</span><span class="ti">${esc(s.name)}</span><span class="ft num">${allItems.length?read+'/'+allItems.length+' read':'Empty'}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
-    }).join('')}</div>`:`<div class="card"><p class="muted">Abhi Class ${cls} (${BOARDS[p.board]}) ke liye Admin Panel se koi subject / folder add nahi hua hai.</p></div>`}</section>`;
+    }).join('')}</div>`:`<div class="card" style="text-align:center;padding:24px 16px"><h3 style="margin-bottom:4px">⏳ Coming Soon</h3><p class="muted small">Class ${cls} (${BOARDS[p.board]}) ke subjects jald hi aane wale hain.</p></div>`}</section>`;
   }
 
   const s=subsList.find(x=>x.id===ui.subj);
@@ -1213,16 +1214,25 @@ function viewStudy(){
     return renderCheckout({id:fl.id,title:fl.name,sub:s.name+' · '+bkObj.name,price:fl.price||99,backAct:'backfolder'});
   }
 
+  let curFl=fl;
+  (ui.subPath||[]).forEach(sfId=>{const nx=(curFl.folders||[]).find(x=>x.id===sfId);if(nx)curFl=nx;});
+  const subFlds=curFl.folders||[];
+  const directOrAll=(subFlds.length&&!(curFl.items||[]).length)?[]:(subFlds.length?(curFl.items||[]):collectFolderItems(curFl));
+
   if(!ui.cat){
-    const allItems=collectFolderItems(fl);
-    return `<section><button class="link" data-act="backfolder">‹ ${esc(bkObj.name)} chapters</button><h2>${esc(fl.name)}</h2><p class="muted">${esc(s.name)} · ${esc(bkObj.name)}</p></section>
-    <section><div class="grid cv">${CATS.filter(c=>!ADM||!ADM.uiControls||!ADM.uiControls.cats||ADM.uiControls.cats[c.id]!==false).map(c=>{
+    const subHtml=subFlds.length?`<section><h3>📁 Sub-folders (${subFlds.length})</h3><div class="grid cv">${subFlds.map(sf=>{
+      const cnt=collectFolderItems(sf).length, bg=sf.cover?`background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${sf.cover}) center/cover no-repeat`:'';
+      return `<button class="cover" style="${bg}" data-act="opensub" data-v="${esc(sf.id)}"><span class="mo" aria-hidden="true">📁</span><span class="bd">${esc(curFl.name)}</span><span class="ti">${esc(sf.name)}</span><span class="ft num">${cnt} items${(sf.folders||[]).length?' · '+(sf.folders||[]).length+' folders':''}</span></button>`;
+    }).join('')}</div></section>`:'';
+    const allItems=subFlds.length?(curFl.items||[]):collectFolderItems(curFl);
+    const catHtml=(!subFlds.length||allItems.length)?`<section><div class="grid cv">${CATS.filter(c=>!ADM||!ADM.uiControls||!ADM.uiControls.cats||ADM.uiControls.cats[c.id]!==false).map(c=>{
       const catItems=allItems.map((it,idx)=>({it,idx})).filter(({it})=>normCat(it.type||'mcq')===c.id);
       const total=Math.max(1,catItems.length);
-      const read=catItems.filter(({idx})=>S.studied[cls+'|'+s.id+'|'+fl.id+'|'+idx]).length;
+      const read=catItems.filter(({idx})=>S.studied[cls+'|'+s.id+'|'+curFl.id+'|'+idx]).length;
       const pct=catItems.length?Math.round(read/total*100):0;
-      return `<button class="cover" style="--p:${pct}%" data-act="cat" data-v="${c.id}"><span class="mo" aria-hidden="true" style="font-size:1.6rem">${c.icon}</span><span class="bd">${esc(fl.name)}</span><span class="ti">${esc(c.name)}</span><span class="ft num">${catItems.length?read+'/'+catItems.length+' read':'0 items'}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
-    }).join('')}</div></section>`;
+      return `<button class="cover" style="--p:${pct}%" data-act="cat" data-v="${c.id}"><span class="mo" aria-hidden="true" style="font-size:1.6rem">${c.icon}</span><span class="bd">${esc(curFl.name)}</span><span class="ti">${esc(c.name)}</span><span class="ft num">${catItems.length?read+'/'+catItems.length+' read':'0 items'}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
+    }).join('')}</div></section>`:'';
+    return `<section><button class="link" data-act="backfolder">‹ ${(ui.subPath&&ui.subPath.length)?'Back':' '+esc(bkObj.name)+' chapters'}</button><h2>${esc(curFl.name)}</h2><p class="muted">${esc(s.name)} · ${esc(bkObj.name)}</p></section>${subHtml}${catHtml}`;
   }
 
   const curFlIdx=bookFolders.findIndex(x=>x.id===fl.id);
@@ -1244,7 +1254,7 @@ function viewStudy(){
     }
     return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px"><button class="btn ghost" style="min-height:44px;padding:0 8px;font-size:.9rem" data-act="finishback">Finish ${esc(fl.name)}</button>${nb}</div>`;
   };
-  const catItems=collectFolderItems(fl).map((it,idx)=>({it,idx})).filter(({it})=>normCat(it.type||'mcq')===catObj.id);
+  const catItems=(subFlds.length?(curFl.items||[]):collectFolderItems(curFl)).map((it,idx)=>({it,idx})).filter(({it})=>normCat(it.type||'mcq')===catObj.id);
   const readN=catItems.filter(({idx})=>S.studied[cls+'|'+s.id+'|'+fl.id+'|'+idx]).length;
   const pct=catItems.length?Math.round(readN/catItems.length*100):0;
 
@@ -1261,6 +1271,8 @@ function viewStudy(){
     }else if(mt==='short'){
       const nxt=catItems[dispIdx+1]?catItems[dispIdx+1].idx:-1;
       inner=`<div class="one" style="white-space:pre-line"><b>Short Answer (${esc(bkObj.name)}):</b> ${esc(it.ans)}</div>${twoBtns(nxt)}`;
+    }else if(mt==='match'){
+      inner=`<div class="card" style="gap:8px;background:var(--soft)"><div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px 10px;align-items:center;font-size:.92rem">${(it.pairs||[]).map((pr,idx)=>`<div style="background:#fff;padding:7px 9px;border-radius:10px;border:1.5px solid var(--line);font-weight:700">${idx+1}. ${esc(pr.l)}</div><div style="color:var(--primary);font-weight:800">→</div><div style="background:#E6F9F1;padding:7px 9px;border-radius:10px;border:1.5px solid var(--good);font-weight:700">${esc(pr.r)}</div>`).join('')}</div></div>`;
     }else if(mt==='pdf'){
       const pUrl=it.pdfUrl||it.videoUrl||'';
       inner=`<div class="card" style="text-align:center;gap:10px;background:var(--soft)"><div style="font-size:2.4rem">📄</div><h3>${esc(it.q)}</h3>${it.ans?`<p class="muted small" style="white-space:pre-line">${esc(it.ans)}</p>`:''}${pUrl?`<a class="btn block" style="text-decoration:none;display:flex;align-items:center;justify-content:center" href="${esc(pUrl)}" download="${esc(it.q||'notes')}.pdf" target="_blank" rel="noopener">📥 Download / Open PDF ›</a>`:'<p class="muted small">PDF link available nahi hai.</p>'}</div>`;
@@ -1745,7 +1757,8 @@ document.addEventListener('click',e=>{
     }
     if(ui.tab==='study'){
       if(ui.cat){awardStudyTime();ui.cat=null;ui.open=null;ui.qOpenAt=0;return render();}
-      if(ui.folder){ui.folder=null;ui.payStep=0;ui.payState=null;return render();}
+      if(ui.subPath&&ui.subPath.length){ui.subPath.pop();return render();}
+      if(ui.folder){ui.folder=null;ui.subPath=[];ui.payStep=0;ui.payState=null;return render();}
       if(ui.book){ui.book=null;return render();}
       if(ui.subj){ui.subj=null;return render();}
       return goTab('home');
