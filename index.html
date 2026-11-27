@@ -541,13 +541,7 @@ function schoolsFor(board,dist,block){
       }
     });
   }
-  const types=SCHOOL_TYPES[board]||SCHOOL_TYPES.bihar;
-  types.forEach((tp,idx)=>{
-    const nm=tp+', '+block+' (Sample)';
-    if(!seen.has(nm)){
-      out.push({id:'s-'+hashStr(k+'|'+idx),board,dist,block,name:nm});
-    }
-  });
+
   _lastSchKey=k;_lastSchList=out;return _lastSchList;
 }
 function findSchoolById(sid,board,dist,block){
