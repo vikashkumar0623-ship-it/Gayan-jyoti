@@ -767,6 +767,27 @@ const EN_BANK={
 ]
 };
 const LANG_LOCKED=new Set(['हिंदी','अंग्रेज़ी','संस्कृत']);
+const isLangLocked=s=>{const v=String(s||'').trim().toLowerCase();return LANG_LOCKED.has(s)||['hindi','english','sanskrit','hindi grammar','english grammar'].includes(v);};
+const TR_CACHE={}, TR_PENDING=new Set();
+let _trTimer=null;
+function trText(txt,lang){
+  if(!ui.trActive||!txt||typeof txt!=='string')return txt;
+  const k=lang+'|'+txt;
+  if(TR_CACHE[k]!==undefined)return TR_CACHE[k];
+  if(!TR_PENDING.has(k)){
+    TR_PENDING.add(k);
+    fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl='+encodeURIComponent(lang)+'&dt=t&q='+encodeURIComponent(txt))
+      .then(r=>r.json())
+      .then(d=>{
+        const out=(d&&Array.isArray(d[0]))?d[0].map(x=>x&&x[0]?x[0]:'').join(''):txt;
+        TR_CACHE[k]=out||txt;
+        clearTimeout(_trTimer);
+        _trTimer=setTimeout(()=>render(),80);
+      })
+      .catch(()=>{TR_CACHE[k]=txt;});
+  }
+  return txt;
+}
 function getBank(s){if(LANG_LOCKED.has(s))return BANK[s];return (ui.lang==='en'&&EN_BANK[s])?EN_BANK[s]:BANK[s];}
 const GLYPH={"हिंदी":"अ","अंग्रेज़ी":"A","गणित":"∑","विज्ञान":"वि","सामाजिक विज्ञान":"सा","संस्कृत":"सं","भौतिकी":"भौ","रसायन":"रसा","जीव विज्ञान":"जी","इतिहास":"इ","भूगोल":"भू","राजनीति विज्ञान":"रा","अर्थशास्त्र":"अर्थ"};
 const subjectsFor=c=>c>=11?["भौतिकी","रसायन","जीव विज्ञान","गणित","हिंदी","अंग्रेज़ी","इतिहास","भूगोल","राजनीति विज्ञान","अर्थशास्त्र"]:["हिंदी","अंग्रेज़ी","गणित","विज्ञान","सामाजिक विज्ञान","संस्कृत"];
@@ -797,7 +818,7 @@ if(!ALL.kids.length)ALL.kids=[blankKid('k1')];
 let S=ALL.kids.find(k=>k.id===ALL.active)||ALL.kids[0]; ALL.active=S.id;
 function save(){try{localStorage.setItem('vidya-sopan-v2',JSON.stringify(ALL))}catch(e){}}
 const dk=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-const ui={loggedOut:(function(){try{return localStorage.getItem('gj-logged-out')==='1';}catch(e){return false;}})(),tab:'home',cls:null,subj:null,buyCourse:null,cMed:'all',cCls:'all',lang:'hi',authMode:'signup',loginMob:'',loginOtp:'',loginStep:0,loginErr:'',payMethod:'phonepe',payState:null,payTx:null,book:null,folder:null,subPath:[],cat:null,sqIdx:0,sqAns:{},sqRes:null,open:null,qOpenAt:0,chapPopup:null,picked:{},test:null,rec:'day',rlevel:'block',rmode:'students',edit:false,confirmReset:false};
+const ui={loggedOut:(function(){try{return localStorage.getItem('gj-logged-out')==='1';}catch(e){return false;}})(),tab:'home',cls:null,subj:null,buyCourse:null,cMed:'all',cCls:'all',lang:'hi',trActive:false,authMode:'signup',loginMob:'',loginOtp:'',loginStep:0,loginErr:'',payMethod:'phonepe',payState:null,payTx:null,book:null,folder:null,subPath:[],cat:null,sqIdx:0,sqAns:{},sqRes:null,open:null,qOpenAt:0,chapPopup:null,picked:{},test:null,rec:'day',rlevel:'block',rmode:'students',edit:false,confirmReset:false};
 const freshOb=em=>({name:'',mobile:'',board:'bihar',cls:'9',dist:'',block:'',sid:'',reqName:'',sent:false,consent:false,step:0,otp:'',email:em||'',err:''});
 let ob={name:'',mobile:'',board:'bihar',cls:'9',dist:'',block:'',sid:'',reqName:'',sent:false,consent:false,step:0,otp:'',email:'',err:''};
 
@@ -805,9 +826,14 @@ function studyPts(){
   return Object.values(S.studied||{}).reduce((sum,v)=>sum+(typeof v==='number'?v:1),0);
 }
 function latestTestPts(){
-  const bySub={};
-  (S.attempts||[]).forEach(a=>{bySub[a.cls+'|'+a.subj]=a;});
-  return Object.values(bySub).reduce((sum,a)=>sum+(a.netPts!==undefined?a.netPts:(a.score||0)),0);
+  const bySub={}, dailyFirst={};
+  (S.attempts||[]).forEach(a=>{
+    if(a.daily){const dk2=(a.d||'')+'|'+a.cls+'|'+a.subj;if(!dailyFirst[dk2])dailyFirst[dk2]=a;}
+    else{bySub[a.cls+'|'+a.subj]=a;}
+  });
+  const s1=Object.values(bySub).reduce((sum,a)=>sum+(a.netPts!==undefined?a.netPts:(a.score||0)),0);
+  const s2=Object.values(dailyFirst).reduce((sum,a)=>sum+(a.netPts!==undefined?a.netPts:(a.score||0)),0);
+  return s1+s2;
 }
 const myPts=()=>Math.max(0,studyPts()+(S.videoPts||0)+(S.theoryPts||0)+latestTestPts());
 function streak(){let n=0;const d=new Date();const key=x=>x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
@@ -1258,37 +1284,37 @@ function viewStudy(){
   const readN=catItems.filter(({idx})=>S.studied[cls+'|'+s.id+'|'+fl.id+'|'+idx]).length;
   const pct=catItems.length?Math.round(readN/catItems.length*100):0;
 
-  return `<div class="sjw${ui.anim?' anim':''}" style="--p:${pct}%"><section><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="link" data-act="backcat">‹ ${esc(fl.name)} folders</button>${!LANG_LOCKED.has(s.raw||s.id)?`<button class="pill" style="cursor:pointer;border-color:var(--primary);color:var(--primary)" data-act="togglelang">🌐 ${ui.lang==='en'?'English':'हिन्दी'}</button>`:''}</div>
+  const hi=(ui.lang!=='en'&&!isLangLocked(s.raw||s.id||s.name));
+  const L=(en,h)=>hi?h:en;
+  return `<div class="sjw${ui.anim?' anim':''}" style="--p:${pct}%;padding-bottom:88px"><section><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="link" data-act="backcat">‹ ${esc(fl.name)} ${L('folders','फ़ोल्डर')}</button>${!isLangLocked(s.raw||s.id||s.name)?`<button class="pill" style="cursor:pointer;border-color:var(--primary);color:var(--primary)" data-act="togglelang">🌐 ${ui.lang==='en'?'English':'हिन्दी'}</button>`:''}</div>
   <div class="sj" ${fl.cover?`style="background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${fl.cover}) center/cover no-repeat"`:''}><span class="wm" aria-hidden="true" style="font-size:4.5rem">${catObj.icon}</span><span class="bd">${esc(s.name)} · ${esc(bkObj.name)} · ${esc(fl.name)}</span><h2>${esc(catObj.name)}</h2><span class="ft num">${catItems.length?readN+'/'+catItems.length+' read':'0 items'}<span class="pbar"><i style="width:${pct}%"></i></span></span></div></section>
   ${(()=>{
     if((catObj.id==='mcq'||catObj.id==='tick')&&catItems.length){
       const res=ui.sqRes;
       if(res&&res.showAnalysis){
-        return `<section><div class="card" style="background:var(--soft);border-color:var(--primary)"><div class="row" style="border-bottom:0;padding:0"><div><h3>📊 Test Analysis</h3><p class="small muted">✓ ${res.ok} Right · ✗ ${res.wrong} Wrong · +${res.pts} pts</p></div><button class="btn ghost sm" data-act="sqretry">Retake</button></div></div><div class="qs">${catItems.map(({it},qi)=>{
+        return `<section><div class="card" style="background:var(--soft);border-color:var(--primary)"><div class="row" style="border-bottom:0;padding:0"><div><h3>📊 ${L('Test Analysis','टेस्ट विश्लेषण')}</h3><p class="small muted">✓ ${res.ok} ${L('Right','सही')} · ✗ ${res.wrong} ${L('Wrong','गलत')} · +${res.pts} pts</p></div></div></div><div class="qs">${catItems.map(({it},qi)=>{
           const sel=ui.sqAns[qi], isMcq=(normCat(it.type||'mcq')==='mcq'), corr=isMcq?it.a:(it.tick!==false?1:0), isOk=(sel!==undefined&&sel===corr);
-          const opts=isMcq?(it.o||[]):['✗ False / गलत','✓ True / सही'];
-          const corrTxt=isMcq?(opts[corr]||''):(corr===1?'✓ True / सही':'✗ False / गलत');
-          const selTxt=sel===undefined?'Skipped':(isMcq?(opts[sel]||''):(sel===1?'✓ True / सही':'✗ False / गलत'));
-          return `<div class="q" style="border-color:${isOk?'var(--good)':'var(--bad)'}"><div style="display:flex;justify-content:space-between;gap:8px"><span class="small" style="font-weight:800;color:${isOk?'var(--good)':'var(--bad)'}">${isOk?'✓ Right (+1 pt)':(sel===undefined?'⏭ Skipped':'✗ Wrong')}</span>${it.page?`<span class="pill off" style="font-size:.72rem">Page: ${esc(it.page)}</span>`:''}</div><p><b>Q${qi+1}. ${esc(it.q)}</b></p><p class="small">Your Answer: <b>${esc(selTxt)}</b>${!isOk?' · Sahi Answer: <b style="color:var(--good)">'+esc(corrTxt)+'</b>':''}</p>${it.e?`<div class="one"><b>Note:</b> ${esc(it.e)}</div>`:''}</div>`;
-        }).join('')}</div></section>`;
+          const opts=isMcq?(it.o||[]).map(x=>trText(x,ui.lang)):[L('✗ False','✗ गलत'),L('✓ True','✓ सही')];
+          const corrTxt=isMcq?(opts[corr]||''):(corr===1?L('✓ True','✓ सही'):L('✗ False','✗ गलत'));
+          const selTxt=sel===undefined?L('Skipped','छोड़ा गया'):(isMcq?(opts[sel]||''):(sel===1?L('✓ True','✓ सही'):L('✗ False','✗ गलत')));
+          return `<div class="q" style="border-color:${isOk?'var(--good)':'var(--bad)'}"><div style="display:flex;justify-content:space-between;gap:8px"><span class="small" style="font-weight:800;color:${isOk?'var(--good)':'var(--bad)'}">${isOk?L('✓ Right (+1 pt)','✓ सही (+1 अंक)'):(sel===undefined?L('⏭ Skipped','⏭ छोड़ा गया'):L('✗ Wrong','✗ गलत'))}</span>${it.page?`<span class="pill off" style="font-size:.72rem">${L('Page','पेज')}: ${esc(it.page)}</span>`:''}</div><p><b>Q${qi+1}. ${esc(trText(it.q,ui.lang))}</b></p><p class="small">${L('Your Answer','आपका उत्तर')}: <b>${esc(selTxt)}</b>${!isOk?' · '+L('Correct Answer','सही उत्तर')+': <b style="color:var(--good)">'+esc(corrTxt)+'</b>':''}</p>${it.e?`<div class="one"><b>${L('Note','नोट')}:</b> ${esc(trText(it.e,ui.lang))}</div>`:''}</div>`;
+        }).join('')}</div></section><div class="actbar"><div class="in"><button class="btn ghost" data-act="backcat">${L('‹ Folders','‹ फ़ोल्डर')}</button><button class="btn" data-act="sqretry">${L('Retake ↻','फिर से दें ↻')}</button></div></div>`;
       }
       const qi=Math.min(Math.max(0,ui.sqIdx||0),catItems.length-1);
       const it=catItems[qi].it, isMcq=(normCat(it.type||'mcq')==='mcq'), sel=ui.sqAns[qi];
       const optsHtml=isMcq
-        ?(it.o||[]).map((o,j)=>`<button class="opt ${sel===j?'picked':''}" style="${sel===j?'border-color:var(--primary);background:var(--soft)':''}" data-act="sqpick" data-i="${qi}" data-o="${j}"><i>${LET[j]}</i><span>${esc(o)}</span></button>`).join('')
-        :[['✓ True / सही',1],['✗ False / गलत',0]].map(([lbl,val])=>`<button class="opt ${sel===val?'picked':''}" style="${sel===val?'border-color:var(--primary);background:var(--soft)':''}" data-act="sqpick" data-i="${qi}" data-o="${val}"><span>${lbl}</span></button>`).join('');
+        ?(it.o||[]).map((o,j)=>`<button class="opt ${sel===j?'picked':''}" style="${sel===j?'border-color:var(--primary);background:var(--soft)':''}" data-act="sqpick" data-i="${qi}" data-o="${j}"><i>${LET[j]}</i><span>${esc(trText(o,ui.lang))}</span></button>`).join('')
+        :[[L('✓ True','✓ सही'),1],[L('✗ False','✗ गलत'),0]].map(([lbl,val])=>`<button class="opt ${sel===val?'picked':''}" style="${sel===val?'border-color:var(--primary);background:var(--soft)':''}" data-act="sqpick" data-i="${qi}" data-o="${val}"><span>${lbl}</span></button>`).join('');
       const isLast=(qi===catItems.length-1)||((qi+1)%10===0);
-      const modalHtml=(res&&!res.showAnalysis)?`<div style="position:fixed;inset:0;z-index:999;background:rgba(15,31,75,.65);display:flex;align-items:center;justify-content:center;padding:18px" role="dialog" aria-modal="true"><div class="card pay-ok" style="max-width:340px;width:100%;box-shadow:0 18px 40px rgba(0,0,0,.35)"><div class="pay-chk" style="width:58px;height:58px;font-size:1.8rem">🎉</div><h2>Test Submitted!</h2><p class="muted">Score: <b>${res.ok} / ${res.total}</b> · Points: <b style="color:var(--good)">+${res.pts} pts</b></p><div class="ok-note" style="width:100%;display:flex;justify-content:space-around"><span>✓ Right: <b>${res.ok}</b></span><span>✗ Wrong: <b>${res.wrong}</b></span><span>⏭ Skip: <b>${res.skip}</b></span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%"><button class="btn ghost" data-act="sqok">OK</button><button class="btn" data-act="sqanalysis">Analysis ›</button></div></div></div>`:'';
+      const modalHtml=(res&&!res.showAnalysis)?`<div style="position:fixed;inset:0;z-index:999;background:rgba(15,31,75,.65);display:flex;align-items:center;justify-content:center;padding:18px" role="dialog" aria-modal="true"><div class="card pay-ok" style="max-width:340px;width:100%;box-shadow:0 18px 40px rgba(0,0,0,.35)"><div class="pay-chk" style="width:58px;height:58px;font-size:1.8rem">🎉</div><h2>${L('Test Submitted!','टेस्ट सबमिट हो गया!')}</h2><p class="muted">${L('Score','स्कोर')}: <b>${res.ok} / ${res.total}</b> · ${L('Points','अंक')}: <b style="color:var(--good)">+${res.pts} pts</b></p><div class="ok-note" style="width:100%;display:flex;justify-content:space-around"><span>✓ ${L('Right','सही')}: <b>${res.ok}</b></span><span>✗ ${L('Wrong','गलत')}: <b>${res.wrong}</b></span><span>⏭ ${L('Skip','छोड़े')}: <b>${res.skip}</b></span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%"><button class="btn ghost" data-act="sqok">${L('OK','ठीक है')}</button><button class="btn" data-act="sqanalysis">${L('Analysis ›','विश्लेषण ›')}</button></div></div></div>`:'';
       return `<section><div class="q" style="gap:10px">
-       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill">Q ${qi+1} / ${catItems.length}</span>${it.page?`<span class="pill off">Page: ${esc(it.page)}</span>`:''}</div>
-       <p style="font-size:1.02rem"><b>${esc(it.q)}</b></p>
+       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill">${L('Q','प्रश्न')} ${qi+1} / ${catItems.length}</span>${it.page?`<span class="pill off">${L('Page','पेज')}: ${esc(it.page)}</span>`:''}</div>
+       <p style="font-size:1.02rem"><b>${esc(trText(it.q,ui.lang))}</b></p>
        <div style="display:flex;flex-direction:column;gap:8px">${optsHtml}</div>
-       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
-        <button class="btn ghost" style="min-height:44px" data-act="sqprev" ${qi<=0?'disabled':''}>‹ Previous</button>
-        ${isLast?`<button class="btn" style="min-height:44px;background:var(--good);box-shadow:0 3px 0 #0B5D2A" data-act="sqsubmit" data-s="${esc(s.id)}" data-f="${esc(curFl.id)}" data-c="${esc(catObj.id)}">Submit Test ✓</button>`:`<button class="btn" style="min-height:44px" data-act="sqnext">Save &amp; Next ›</button>`}
-       </div>
-       ${isLast&&qi<catItems.length-1?`<button class="link" style="text-align:center" data-act="sqnext">Continue to Q${qi+2} without submit ›</button>`:''}
-      </div></section>${modalHtml}`;
+       ${isLast&&qi<catItems.length-1?`<button class="link" style="text-align:center;margin-top:4px" data-act="sqnext">${L('Continue to Q'+(qi+2)+' without submit ›','बिना सबमिट प्रश्न '+(qi+2)+' पर जाएं ›')}</button>`:''}
+      </div></section>
+      <div class="actbar"><div class="in"><button class="btn ghost" data-act="sqprev" ${qi<=0?'disabled':''}>${L('‹ Previous','‹ पिछला')}</button>${isLast?`<button class="btn" style="background:var(--good);box-shadow:0 3px 0 #0B5D2A" data-act="sqsubmit" data-s="${esc(s.id)}" data-f="${esc(curFl.id)}" data-c="${esc(catObj.id)}">${L('Submit Test ✓','टेस्ट सबमिट करें ✓')}</button>`:`<button class="btn" data-act="sqnext">${L('Save & Next ›','सेव और अगला ›')}</button>`}</div></div>
+      ${modalHtml}`;
     }
     return `<section>${catItems.map(({it,idx},dispIdx)=>{
     const key=cls+'|'+s.id+'|'+fl.id+'|'+idx, open=ui.open===idx, picked=ui.picked[key], read=!!S.studied[key], mt=normCat(it.type||'mcq');
@@ -1300,7 +1326,7 @@ function viewStudy(){
       inner=`${[['✓ True / सही',1],['✗ False / गलत',0]].map(([lbl,val])=>{let c='';if(picked!==undefined){if(val===corr)c='right';else if(val===picked)c='wrong';}return `<button class="opt ${c}" data-act="admopt" data-pts="1" data-k="${esc(key)}" data-o="${val}"><span>${lbl}</span></button>`;}).join('')}${picked!==undefined&&it.e?`<div class="one"><b>Note:</b> ${esc(it.e)}</div>`:''}`;
     }else if(mt==='short'){
       const nxt=catItems[dispIdx+1]?catItems[dispIdx+1].idx:-1;
-      inner=`<div class="one" style="white-space:pre-line"><b>Short Answer (${esc(bkObj.name)}):</b> ${esc(it.ans)}</div>${twoBtns(nxt)}`;
+      inner=`<div class="one" style="white-space:pre-line"><b>${L('Short Answer','लघु उत्तर')} (${esc(bkObj.name)}):</b> ${esc(trText(it.ans,ui.lang))}</div>${twoBtns(nxt)}`;
     }else if(mt==='match'){
       inner=`<div class="card" style="gap:8px;background:var(--soft)"><div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px 10px;align-items:center;font-size:.92rem">${(it.pairs||[]).map((pr,idx)=>`<div style="background:#fff;padding:7px 9px;border-radius:10px;border:1.5px solid var(--line);font-weight:700">${idx+1}. ${esc(pr.l)}</div><div style="color:var(--primary);font-weight:800">→</div><div style="background:#E6F9F1;padding:7px 9px;border-radius:10px;border:1.5px solid var(--good);font-weight:700">${esc(pr.r)}</div>`).join('')}</div></div>`;
     }else if(mt==='pdf'){
@@ -1320,14 +1346,15 @@ function viewStudy(){
       </div>`;
     }else if(mt==='theory'){
       const nxt=catItems[dispIdx+1]?catItems[dispIdx+1].idx:-1;
-      inner=`<div class="one" style="white-space:pre-line"><b>Chapter Theory:</b>\n${esc(it.ans)}</div>${twoBtns(nxt)}`;
+      inner=`<div class="one" style="white-space:pre-line"><b>${L('Chapter Theory','अध्याय सिद्धांत')}:</b>\n${esc(trText(it.ans,ui.lang))}</div>${twoBtns(nxt)}`;
     }else{
       const nxt=catItems[dispIdx+1]?catItems[dispIdx+1].idx:-1;
       inner=`${it.chapter?`<p class="small muted">${esc(it.chapter)}</p>`:''}<div class="one" style="white-space:pre-line"><b>Long Answer (${esc(bkObj.name)}):</b>
 ${esc(it.ans)}</div>${twoBtns(nxt)}`;
     }
-    return `<div class="q ${read?'read':''}" style="--i:${dispIdx}"><button class="head" data-act="q" data-v="${idx}" aria-expanded="${open}"><span class="no num">${read?'✓':dispIdx+1}</span><span class="qt">${esc(it.q)}${it.page?`<small class="muted" style="display:block;font-weight:600">Page: ${esc(it.page)}</small>`:''}</span></button>${open?`<div class="body">${inner}</div>`:''}</div>`;
-  }).join('')||`<p class="muted">No ${esc(catObj.name)} items in ${esc(fl.name)} (${esc(bkObj.name)}) yet.</p>`}</section>`;})()}</div>${ui.chapPopup?`<div class="mdl" role="dialog" aria-modal="true"><div class="mc" style="text-align:center"><div style="font-size:2rem">🎉</div><h3>Thank You!</h3><p class="small"><b>${esc(ui.chapPopup.prevTitle)}</b> complete karne ke liye dhanyawad!</p><p class="small">Ab aap <b>${esc(ui.chapPopup.nextChap)}</b> ke <b>${esc(ui.chapPopup.catName)}</b> section par ja rahe hain.</p><button class="btn block" data-act="closecpop">Shuru Karein ›</button></div></div>`:''}`;
+    return `<div class="q ${read?'read':''}" style="--i:${dispIdx}"><button class="head" data-act="q" data-v="${idx}" aria-expanded="${open}"><span class="no num">${read?'✓':dispIdx+1}</span><span class="qt">${esc(trText(it.q,ui.lang))}${it.page?`<small class="muted" style="display:block;font-weight:600">${L('Page','पेज')}: ${esc(it.page)}</small>`:''}</span></button>${open?`<div class="body">${inner}</div>`:''}</div>`;
+  }).join('')||`<p class="muted">No ${esc(catObj.name)} items in ${esc(fl.name)} (${esc(bkObj.name)}) yet.</p>`}</section>
+  <div class="actbar"><div class="in"><button class="btn ghost" data-act="backcat">‹ Folders</button>${nextSec?`<button class="btn" data-act="nextsec" data-ncat="${nextSec.id}" data-ncname="${esc(nextSec.name)}" data-prevsec="${esc(catObj.name)}" data-chap="${esc(fl.name)}">Next · ${esc(nextSec.name)} ›</button>`:(nextChap?`<button class="btn" data-act="nextchap" data-cid="${esc(nextChap.id)}" data-cname="${esc(nextChap.name)}" data-prev="${esc(fl.name)}" data-cat="Chapter Theory">Next · ${esc(nextChap.name)} ›</button>`:`<button class="btn" data-act="backcat">Completed ✓</button>`)}</div></div>`;})()}</div>${ui.chapPopup?`<div class="mdl" role="dialog" aria-modal="true"><div class="mc" style="text-align:center"><div style="font-size:2rem">🎉</div><h3>Thank You!</h3><p class="small"><b>${esc(ui.chapPopup.prevTitle)}</b> complete karne ke liye dhanyawad!</p><p class="small">Ab aap <b>${esc(ui.chapPopup.nextChap)}</b> ke <b>${esc(ui.chapPopup.catName)}</b> section par ja rahe hain.</p><button class="btn block" data-act="closecpop">Shuru Karein ›</button></div></div>`:''}`;
 }
 
 /* ---------- Test (English UI, Hindi questions) ---------- */
@@ -1347,15 +1374,15 @@ function modalHTML(t,solved,total){
   return `<div class="mdl" role="dialog" aria-modal="true" aria-labelledby="mt"><div class="mc"><h3 id="mt">Submit test?</h3><p>You have answered <b>${solved}</b> of <b>${total}</b> questions.${sk?` <b>${sk}</b> skipped.`:' All questions are answered.'}</p><p class="small muted">You cannot change your answers after submitting.</p><div class="mbtns"><button class="btn ghost" data-act="treview">${sk?'Review skipped':'Go back'}</button><button class="btn" data-act="tsubmit">Submit</button></div></div></div>`;
 }
 function viewRun(t){
-  const total=t.qs.length, q=BANK[t.subj][t.qs[t.i]];
+  const _pool=t.pool||getBank(t.subj)||BANK[t.subj]; const total=t.qs.length, q=_pool[t.qs[t.i]];
   const solved=Object.keys(t.ans).length, left=total-solved, secs=Math.floor((Date.now()-t.start)/1000);
   return `<div style="display:flex;flex-direction:column;gap:14px;padding-bottom:16px">
    <div class="tqtop"><button class="link" data-act="texit">‹ Exit</button><span class="tqsub">${SUBJ_EN[t.subj]}</span>${!LANG_LOCKED.has(t.subj)?`<button class="pill" style="cursor:pointer;border-color:var(--primary);color:var(--primary)" data-act="togglelang">🌐 ${ui.lang==='en'?'English':'हिन्दी'}</button>`:'<span style="width:48px" aria-hidden="true"></span>'}</div>
    <div class="tstat num"><div><b>${solved}/${total}</b><span>Solved</span></div><div><b>${left}</b><span>Remaining</span></div><div><b id="tm">${fmt(secs)}</b><span>Time</span></div></div>
    <div class="bar" role="progressbar" aria-label="Solved" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${solved}"><i style="width:${Math.round(solved/total*100)}%"></i></div>
    <p class="tqn">Question ${t.i+1} of ${total}</p>
-   <p class="tqq">${esc(q[0])}</p>
-   <div style="display:flex;flex-direction:column;gap:10px">${q[1].map((o,j)=>`<button class="opt ${t.sel===j?'sel':''}" data-act="topt" data-o="${j}" aria-pressed="${t.sel===j}"><i>${LETE[j]}</i><span>${esc(o)}</span></button>`).join('')}</div>
+   <p class="tqq">${esc(t.pool?trText(q[0],ui.lang):q[0])}</p>
+   <div style="display:flex;flex-direction:column;gap:10px">${q[1].map((o,j)=>`<button class="opt ${t.sel===j?'sel':''}" data-act="topt" data-o="${j}" aria-pressed="${t.sel===j}"><i>${LETE[j]}</i><span>${esc(t.pool?trText(o,ui.lang):o)}</span></button>`).join('')}</div>
   </div>
   <div class="actbar"><div class="in"><button class="btn ghost" data-act="tskip">Skip</button><button class="btn" data-act="tsave" ${t.sel===null?'disabled':''}>Save &amp; Next</button></div></div>
   ${t.modal?modalHTML(t,solved,total):''}`;
@@ -1363,7 +1390,7 @@ function viewRun(t){
 function viewResult(a){
   const f=ui.afilter||'all', total=a.total, acc=Math.round(a.score/total*100), avg=Math.round(a.secs/total);
   const list=a.det.map((d,idx)=>({d,idx})).filter(({d})=>f==='all'||(f==='correct'&&d.ok)||(f==='wrong'&&!d.ok&&!d.sk)||(f==='skipped'&&d.sk)).map(({d,idx})=>{
-    const q=getBank(a.subj)[d.qi], st=d.ok?['Correct','good']:d.sk?['Skipped','mut']:['Wrong','bad'];
+    const q=(a.pool||getBank(a.subj))[d.qi], st=d.ok?['Correct','good']:d.sk?['Skipped','mut']:['Wrong','bad'];
     return `<div class="card an"><div class="anh"><b>Q${idx+1}</b><span class="tag ${st[1]}">${st[0]}</span><span class="small muted num" style="margin-left:auto">${d.sec}s</span></div>
      <p class="tqq" style="font-size:1.05rem">${esc(q[0])}</p>
      <p class="small"><span class="muted">Your answer:</span> ${d.sel===null?'<b>Not attempted</b>':`<b>${LETE[d.sel]}. ${esc(q[1][d.sel])}</b>`}</p>
@@ -1530,11 +1557,32 @@ function viewCourse(){
     return `<section><h3>Class ${cl} ${cl===+p.cls?'<span class="pill" style="font-size:.75rem;margin-left:6px">Your Class</span>':''}</h3>${cList.map(cardHTML).join('')}</section>`;
   }).join('')}`;
 }
+function autoDailyQs(board,cls,subj){
+  const admSubs=admSubjectsFor(board,cls)||[];
+  let pool=[];
+  const sObj=admSubs.find(x=>x.name===subj||x.id===subj);
+  if(sObj){
+    (sObj.folders||[]).forEach(fl=>{
+      collectFolderItems(fl).forEach(it=>{
+        if(normCat(it.type||'mcq')==='mcq'&&it.q&&Array.isArray(it.o)&&it.o.length>=2){
+          pool.push([it.q,it.o,it.a||0,it.e||'']);
+        }
+      });
+    });
+  }
+  if(!pool.length)pool=getBank(subj)||[];
+  const seed=hashStr(dk()+'|'+board+'|'+cls+'|'+subj);
+  const scored=pool.map((q,idx)=>({q,k:hashStr(seed+'|'+idx)}));
+  scored.sort((a,b)=>a.k-b.k);
+  return scored.slice(0,Math.min(10,scored.length)).map(x=>x.q);
+}
 function viewTest(){
   const p=S.profile, today=dk(); const t=ui.test;
   if(t&&t.stage==='run')return viewRun(t);
   if(t&&t.stage==='done')return viewResult(t.att);
-  return `<section><h2>Daily Test</h2><p class="muted">5 questions per subject (MCQ, Tick, Match, Fill in the blanks). <b>+1 pt</b> per correct answer. Re-attempt removes previous points of this test and adds the new score (whether higher or lower).</p></section>
+  const admSubs=admSubjectsFor(p.board,p.cls);
+  const testSubjs=admSubs?admSubs.map(x=>x.name):subjectsFor(p.cls);
+  return `<section><h2>Daily Test (Auto 12:00 AM)</h2><p class="muted">Har raat 12:00 AM par uploaded MCQs mein se automatic <b>10 questions</b> ka naya test aata hai. <b>+1 pt</b> per sahi jawab — ek baar add hone ke baad points permanent rehte hain.</p></section>
   ${(()=>{
     const admDts=(ADM&&Array.isArray(ADM.dailyTests)?ADM.dailyTests:[]).filter(dt=>dt.board===p.board&&+dt.cls===+p.cls&&Array.isArray(dt.qs)&&dt.qs.length);
     if(!admDts.length)return '';
@@ -1543,8 +1591,10 @@ function viewTest(){
       return `<button class="folder ${ta.length?'done':''}" data-act="tstartadm" data-v="${esc(dt.id)}"><span class="g" style="background:var(--primary);color:#fff">📝</span><span class="t"><b>${esc(dt.title)}</b><span class="num">${esc(dt.subj)} · ${dt.qs.length} Qs${ta.length?' · best '+r+'/'+dt.qs.length:''}</span></span></button>`;
     }).join('')}</div></section>`;
   })()}
-  <section><div class="grid">${subjectsFor(p.cls).map(s=>{const ta=S.attempts.filter(a=>a.d===today&&a.cls===p.cls&&a.subj===s),r=ta.length?Math.max(...ta.map(a=>a.score)):null;
-    return `<button class="folder ${ta.length?'done':''}" data-act="tstart" data-v="${esc(s)}"><span class="g" style="background:${CV[s]};color:#fff">${subjIcon(s)}</span><span class="t"><b>${SUBJ_EN[s]}</b><span class="num">${ta.length?ta.length+(ta.length>1?' attempts':' attempt')+' · best '+r+'/5':'Not taken today'}</span></span></button>`}).join('')}</div></section>`;
+  <section><div class="grid">${testSubjs.map(s=>{
+      const ta=S.attempts.filter(a=>a.d===today&&a.cls===p.cls&&a.subj===s), doneToday=ta.length>0, firstScore=doneToday?ta[0].score:0, totQ=doneToday?(ta[0].total||10):autoDailyQs(p.board,p.cls,s).length;
+      return `<button class="folder ${doneToday?'done':''}" data-act="tstart" data-v="${esc(s)}" ${doneToday?'disabled':''}><span class="g" style="background:${CV[s]||'var(--primary)'};color:#fff">${subjIcon(s)}</span><span class="t"><b>${esc(SUBJ_EN[s]||s)}</b><span class="num">${doneToday?('✓ Done Today · +'+firstScore+'/'+totQ+' pts Locked'):(totQ+' Qs · Ready today')}</span></span></button>`;
+    }).join('')}</div></section>`;
 }
 
 function rowHTML(x,i){
@@ -1760,7 +1810,8 @@ function render(){
   const _unModal=_newUn?`<div style="position:fixed;inset:0;z-index:999;background:rgba(15,31,75,.65);display:flex;align-items:center;justify-content:center;padding:18px" role="dialog" aria-modal="true"><div class="card pay-ok" style="max-width:340px;width:100%;box-shadow:0 18px 40px rgba(0,0,0,.35);animation:popIn .25s ease"><div class="pay-chk" style="width:62px;height:62px;font-size:2rem">🎉</div><h2 style="color:var(--good)">Course Unlocked!</h2><p class="muted">Badhai ho <b>${esc(S.profile.name)}</b>! Aapka course <b>${esc(_newUn.title)}</b> ab unlock ho gaya hai.</p><div class="ok-note" style="width:100%;text-align:center">Ab aap sabhi Notes, Videos aur Tests padh sakte hain ✓</div><button class="btn block" style="background:var(--good);box-shadow:0 4px 0 #0B5D2A" data-act="ackunlock" data-v="${esc(_newUn.id)}">Start Learning Now ›</button></div></div>`:'';
   const _swKid=ui.switchTarget?ALL.kids.find(x=>x.id===ui.switchTarget):null;
   const _swModal=(_swKid&&_swKid.profile)?`<div style="position:fixed;inset:0;z-index:999;background:rgba(15,31,75,.65);display:flex;align-items:center;justify-content:center;padding:18px" role="dialog" aria-modal="true"><div class="card clean-card" style="max-width:320px;width:100%;display:flex;flex-direction:column;gap:10px;box-shadow:0 18px 40px rgba(0,0,0,.35)"><div style="text-align:center"><h2>🔒 Profile Locked</h2><p class="muted small"><b>${esc(_swKid.profile.name)}</b> ka account kholne ke liye unka 4-digit PIN daalein.</p></div><div class="field"><label for="f-swp">4-Digit PIN</label><input id="f-swp" data-f="switchPin" type="password" inputmode="numeric" maxlength="4" value="${esc(ui.switchPin||'')}" placeholder="••••"></div>${ui.switchErr?`<p class="err" role="alert">${esc(ui.switchErr)}</p>`:''}<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn ghost" data-act="cancelswitch">Cancel</button><button class="btn" data-act="confirmswitch">Unlock ›</button></div></div></div>`:'';
-  app.innerHTML=shell(v(),true)+_unModal+_swModal;
+  const _showNav=!(ui.tab==='study'&&ui.cat);
+  app.innerHTML=shell(v(),_showNav)+_unModal+_swModal;
   paint();
   ui.anim=false;
 }
@@ -1775,7 +1826,7 @@ function goTab(t,keep){awardStudyTime();flushTime(true);
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-act]'); if(!b)return;
   const a=b.dataset.act, v=b.dataset.v, p=S.profile;
-  if(a==='togglelang'){ui.lang=(ui.lang==='en'?'hi':'en');return render()}
+  if(a==='togglelang'){ui.lang=(ui.lang==='en'?'hi':'en');ui.trActive=true;return render()}
   if(a==='topback'){
     if(ui.edit){ui.edit=false;return render();}
     if(!S.profile||ui.loggedOut){
@@ -1963,8 +2014,12 @@ document.addEventListener('click',e=>{
     return render();
   }
   if(a==='tstart'){
-    const idx=BANK[v].map((_,i)=>i).sort(()=>Math.random()-.5);
-    ui.test={stage:'run',subj:v,qs:idx,i:0,sel:null,ans:{},skip:{},times:{},start:Date.now(),qstart:Date.now(),modal:null};
+    const p=S.profile, today=dk();
+    if(S.attempts.some(x=>x.d===today&&x.cls===p.cls&&x.subj===v))return;
+    const pool=autoDailyQs(p.board,p.cls,v);
+    if(!pool.length)return;
+    const idx=pool.map((_,i)=>i);
+    ui.test={stage:'run',subj:v,pool,daily:true,qs:idx,i:0,sel:null,ans:{},skip:{},times:{},start:Date.now(),qstart:Date.now(),modal:null};
     startTick();try{window.scrollTo(0,0)}catch(err){}return render();
   }
   if(a==='topt'){const t=ui.test;if(!t||t.modal)return;t.sel=+b.dataset.o;return render()}
@@ -1975,12 +2030,12 @@ document.addEventListener('click',e=>{
   if(a==='treview'){const t=ui.test;t.modal=null;const j=t.qs.findIndex(q=>t.ans[q]===undefined);gotoQ(t,j>=0?j:t.qs.length-1);try{window.scrollTo(0,0)}catch(err){}return render()}
   if(a==='tsubmit'){
     const t=ui.test;lap(t);stopTick();
-    const det=t.qs.map(qi=>{const sel=t.ans[qi]!==undefined?t.ans[qi]:null;return {qi,sel,ok:sel!==null&&sel===getBank(t.subj)[qi][2],sk:sel===null,sec:Math.round((t.times[qi]||0)/1000)}});
+    const det=t.qs.map(qi=>{const sel=t.ans[qi]!==undefined?t.ans[qi]:null;return {qi,sel,ok:sel!==null&&sel===(t.pool||getBank(t.subj))[qi][2],sk:sel===null,sec:Math.round((t.times[qi]||0)/1000)}});
     const score=det.filter(d=>d.ok).length, skipped=det.filter(d=>d.sk).length, wrong=det.length-score-skipped;
     const prevAtt=[...S.attempts].reverse().find(x=>x.cls===p.cls&&x.subj===t.subj);
     const isRe=!!prevAtt, prevPts=prevAtt?(prevAtt.netPts!==undefined?prevAtt.netPts:(prevAtt.score||0)):0;
     const netPts=score*1;
-    const att={n:S.attempts.length+1,ts:Date.now(),d:dk(),cls:p.cls,subj:t.subj,score,total:det.length,wrong,skipped,netPts,prevPts,reAttempt:isRe,secs:Math.round((Date.now()-t.start)/1000),det};
+    const att={n:S.attempts.length+1,ts:Date.now(),d:dk(),cls:p.cls,subj:t.subj,daily:!!t.daily,pool:t.pool||null,score,total:det.length,wrong,skipped,netPts,prevPts,reAttempt:isRe,secs:Math.round((Date.now()-t.start)/1000),det};
     S.attempts.push(att);att.pts=myPts();att.rank=snapRanks();markDay();save();
     ui.test={stage:'done',att,subj:t.subj};ui.afilter='all';try{window.scrollTo(0,0)}catch(err){}return render();
   }
