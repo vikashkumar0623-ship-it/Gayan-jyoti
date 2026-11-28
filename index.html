@@ -797,7 +797,7 @@ if(!ALL.kids.length)ALL.kids=[blankKid('k1')];
 let S=ALL.kids.find(k=>k.id===ALL.active)||ALL.kids[0]; ALL.active=S.id;
 function save(){try{localStorage.setItem('vidya-sopan-v2',JSON.stringify(ALL))}catch(e){}}
 const dk=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-const ui={loggedOut:(function(){try{return localStorage.getItem('gj-logged-out')==='1';}catch(e){return false;}})(),tab:'home',cls:null,subj:null,buyCourse:null,cMed:'all',cCls:'all',lang:'hi',authMode:'signup',loginMob:'',loginOtp:'',loginStep:0,loginErr:'',payMethod:'phonepe',payState:null,payTx:null,book:null,folder:null,subPath:[],cat:null,open:null,qOpenAt:0,chapPopup:null,picked:{},test:null,rec:'day',rlevel:'block',rmode:'students',edit:false,confirmReset:false};
+const ui={loggedOut:(function(){try{return localStorage.getItem('gj-logged-out')==='1';}catch(e){return false;}})(),tab:'home',cls:null,subj:null,buyCourse:null,cMed:'all',cCls:'all',lang:'hi',authMode:'signup',loginMob:'',loginOtp:'',loginStep:0,loginErr:'',payMethod:'phonepe',payState:null,payTx:null,book:null,folder:null,subPath:[],cat:null,sqIdx:0,sqAns:{},sqRes:null,open:null,qOpenAt:0,chapPopup:null,picked:{},test:null,rec:'day',rlevel:'block',rmode:'students',edit:false,confirmReset:false};
 const freshOb=em=>({name:'',mobile:'',board:'bihar',cls:'9',dist:'',block:'',sid:'',reqName:'',sent:false,consent:false,step:0,otp:'',email:em||'',err:''});
 let ob={name:'',mobile:'',board:'bihar',cls:'9',dist:'',block:'',sid:'',reqName:'',sent:false,consent:false,step:0,otp:'',email:'',err:''};
 
@@ -1260,7 +1260,37 @@ function viewStudy(){
 
   return `<div class="sjw${ui.anim?' anim':''}" style="--p:${pct}%"><section><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="link" data-act="backcat">‹ ${esc(fl.name)} folders</button>${!LANG_LOCKED.has(s.raw||s.id)?`<button class="pill" style="cursor:pointer;border-color:var(--primary);color:var(--primary)" data-act="togglelang">🌐 ${ui.lang==='en'?'English':'हिन्दी'}</button>`:''}</div>
   <div class="sj" ${fl.cover?`style="background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${fl.cover}) center/cover no-repeat"`:''}><span class="wm" aria-hidden="true" style="font-size:4.5rem">${catObj.icon}</span><span class="bd">${esc(s.name)} · ${esc(bkObj.name)} · ${esc(fl.name)}</span><h2>${esc(catObj.name)}</h2><span class="ft num">${catItems.length?readN+'/'+catItems.length+' read':'0 items'}<span class="pbar"><i style="width:${pct}%"></i></span></span></div></section>
-  <section>${catItems.map(({it,idx},dispIdx)=>{
+  ${(()=>{
+    if((catObj.id==='mcq'||catObj.id==='tick')&&catItems.length){
+      const res=ui.sqRes;
+      if(res&&res.showAnalysis){
+        return `<section><div class="card" style="background:var(--soft);border-color:var(--primary)"><div class="row" style="border-bottom:0;padding:0"><div><h3>📊 Test Analysis</h3><p class="small muted">✓ ${res.ok} Right · ✗ ${res.wrong} Wrong · +${res.pts} pts</p></div><button class="btn ghost sm" data-act="sqretry">Retake</button></div></div><div class="qs">${catItems.map(({it},qi)=>{
+          const sel=ui.sqAns[qi], isMcq=(normCat(it.type||'mcq')==='mcq'), corr=isMcq?it.a:(it.tick!==false?1:0), isOk=(sel!==undefined&&sel===corr);
+          const opts=isMcq?(it.o||[]):['✗ False / गलत','✓ True / सही'];
+          const corrTxt=isMcq?(opts[corr]||''):(corr===1?'✓ True / सही':'✗ False / गलत');
+          const selTxt=sel===undefined?'Skipped':(isMcq?(opts[sel]||''):(sel===1?'✓ True / सही':'✗ False / गलत'));
+          return `<div class="q" style="border-color:${isOk?'var(--good)':'var(--bad)'}"><div style="display:flex;justify-content:space-between;gap:8px"><span class="small" style="font-weight:800;color:${isOk?'var(--good)':'var(--bad)'}">${isOk?'✓ Right (+1 pt)':(sel===undefined?'⏭ Skipped':'✗ Wrong')}</span>${it.page?`<span class="pill off" style="font-size:.72rem">Page: ${esc(it.page)}</span>`:''}</div><p><b>Q${qi+1}. ${esc(it.q)}</b></p><p class="small">Your Answer: <b>${esc(selTxt)}</b>${!isOk?' · Sahi Answer: <b style="color:var(--good)">'+esc(corrTxt)+'</b>':''}</p>${it.e?`<div class="one"><b>Note:</b> ${esc(it.e)}</div>`:''}</div>`;
+        }).join('')}</div></section>`;
+      }
+      const qi=Math.min(Math.max(0,ui.sqIdx||0),catItems.length-1);
+      const it=catItems[qi].it, isMcq=(normCat(it.type||'mcq')==='mcq'), sel=ui.sqAns[qi];
+      const optsHtml=isMcq
+        ?(it.o||[]).map((o,j)=>`<button class="opt ${sel===j?'picked':''}" style="${sel===j?'border-color:var(--primary);background:var(--soft)':''}" data-act="sqpick" data-i="${qi}" data-o="${j}"><i>${LET[j]}</i><span>${esc(o)}</span></button>`).join('')
+        :[['✓ True / सही',1],['✗ False / गलत',0]].map(([lbl,val])=>`<button class="opt ${sel===val?'picked':''}" style="${sel===val?'border-color:var(--primary);background:var(--soft)':''}" data-act="sqpick" data-i="${qi}" data-o="${val}"><span>${lbl}</span></button>`).join('');
+      const isLast=(qi===catItems.length-1)||((qi+1)%10===0);
+      const modalHtml=(res&&!res.showAnalysis)?`<div style="position:fixed;inset:0;z-index:999;background:rgba(15,31,75,.65);display:flex;align-items:center;justify-content:center;padding:18px" role="dialog" aria-modal="true"><div class="card pay-ok" style="max-width:340px;width:100%;box-shadow:0 18px 40px rgba(0,0,0,.35)"><div class="pay-chk" style="width:58px;height:58px;font-size:1.8rem">🎉</div><h2>Test Submitted!</h2><p class="muted">Score: <b>${res.ok} / ${res.total}</b> · Points: <b style="color:var(--good)">+${res.pts} pts</b></p><div class="ok-note" style="width:100%;display:flex;justify-content:space-around"><span>✓ Right: <b>${res.ok}</b></span><span>✗ Wrong: <b>${res.wrong}</b></span><span>⏭ Skip: <b>${res.skip}</b></span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%"><button class="btn ghost" data-act="sqok">OK</button><button class="btn" data-act="sqanalysis">Analysis ›</button></div></div></div>`:'';
+      return `<section><div class="q" style="gap:10px">
+       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill">Q ${qi+1} / ${catItems.length}</span>${it.page?`<span class="pill off">Page: ${esc(it.page)}</span>`:''}</div>
+       <p style="font-size:1.02rem"><b>${esc(it.q)}</b></p>
+       <div style="display:flex;flex-direction:column;gap:8px">${optsHtml}</div>
+       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+        <button class="btn ghost" style="min-height:44px" data-act="sqprev" ${qi<=0?'disabled':''}>‹ Previous</button>
+        ${isLast?`<button class="btn" style="min-height:44px;background:var(--good);box-shadow:0 3px 0 #0B5D2A" data-act="sqsubmit" data-s="${esc(s.id)}" data-f="${esc(curFl.id)}" data-c="${esc(catObj.id)}">Submit Test ✓</button>`:`<button class="btn" style="min-height:44px" data-act="sqnext">Save &amp; Next ›</button>`}
+       </div>
+       ${isLast&&qi<catItems.length-1?`<button class="link" style="text-align:center" data-act="sqnext">Continue to Q${qi+2} without submit ›</button>`:''}
+      </div></section>${modalHtml}`;
+    }
+    return `<section>${catItems.map(({it,idx},dispIdx)=>{
     const key=cls+'|'+s.id+'|'+fl.id+'|'+idx, open=ui.open===idx, picked=ui.picked[key], read=!!S.studied[key], mt=normCat(it.type||'mcq');
     let inner='';
     if(mt==='mcq'){
@@ -1297,7 +1327,7 @@ function viewStudy(){
 ${esc(it.ans)}</div>${twoBtns(nxt)}`;
     }
     return `<div class="q ${read?'read':''}" style="--i:${dispIdx}"><button class="head" data-act="q" data-v="${idx}" aria-expanded="${open}"><span class="no num">${read?'✓':dispIdx+1}</span><span class="qt">${esc(it.q)}${it.page?`<small class="muted" style="display:block;font-weight:600">Page: ${esc(it.page)}</small>`:''}</span></button>${open?`<div class="body">${inner}</div>`:''}</div>`;
-  }).join('')||`<p class="muted">No ${esc(catObj.name)} items in ${esc(fl.name)} (${esc(bkObj.name)}) yet.</p>`}</section></div>${ui.chapPopup?`<div class="mdl" role="dialog" aria-modal="true"><div class="mc" style="text-align:center"><div style="font-size:2rem">🎉</div><h3>Thank You!</h3><p class="small"><b>${esc(ui.chapPopup.prevTitle)}</b> complete karne ke liye dhanyawad!</p><p class="small">Ab aap <b>${esc(ui.chapPopup.nextChap)}</b> ke <b>${esc(ui.chapPopup.catName)}</b> section par ja rahe hain.</p><button class="btn block" data-act="closecpop">Shuru Karein ›</button></div></div>`:''}`;
+  }).join('')||`<p class="muted">No ${esc(catObj.name)} items in ${esc(fl.name)} (${esc(bkObj.name)}) yet.</p>`}</section>`;})()}</div>${ui.chapPopup?`<div class="mdl" role="dialog" aria-modal="true"><div class="mc" style="text-align:center"><div style="font-size:2rem">🎉</div><h3>Thank You!</h3><p class="small"><b>${esc(ui.chapPopup.prevTitle)}</b> complete karne ke liye dhanyawad!</p><p class="small">Ab aap <b>${esc(ui.chapPopup.nextChap)}</b> ke <b>${esc(ui.chapPopup.catName)}</b> section par ja rahe hain.</p><button class="btn block" data-act="closecpop">Shuru Karein ›</button></div></div>`:''}`;
 }
 
 /* ---------- Test (English UI, Hindi questions) ---------- */
@@ -1782,7 +1812,33 @@ document.addEventListener('click',e=>{
   if(a==='backbook'){ui.book=null;ui.folder=null;ui.cat=null;ui.open=null;return render()}
   if(a==='folder'){ui.folder=v;ui.subPath=[];ui.cat=null;ui.payStep=0;ui.payState=null;ui.open=null;ui.anim=true;return render()}
   if(a==='opensub'){ui.subPath=[...(ui.subPath||[]),v];ui.cat=null;ui.open=null;ui.anim=true;return render()}
-  if(a==='cat'){ui.cat=v;ui.open=null;ui.anim=true;return render()}
+  if(a==='cat'){ui.cat=v;ui.sqIdx=0;ui.sqAns={};ui.sqRes=null;ui.open=null;ui.anim=true;return render()}
+  if(a==='sqpick'){ui.sqAns=ui.sqAns||{};ui.sqAns[+b.dataset.i]=+b.dataset.o;return render()}
+  if(a==='sqprev'){ui.sqIdx=Math.max(0,(ui.sqIdx||0)-1);return render()}
+  if(a==='sqnext'){ui.sqIdx=(ui.sqIdx||0)+1;return render()}
+  if(a==='sqok'){ui.sqRes=null;return render()}
+  if(a==='sqanalysis'){if(ui.sqRes)ui.sqRes.showAnalysis=true;return render()}
+  if(a==='sqretry'){ui.sqIdx=0;ui.sqAns={};ui.sqRes=null;return render()}
+  if(a==='sqsubmit'){
+    const p=S.profile, admSubs=admSubjectsFor(p.board,p.cls);
+    const sObj=(admSubs||[]).find(x=>x.id===b.dataset.s);
+    if(!sObj)return;
+    let curF=null;
+    const findF=arr=>{for(const x of(arr||[])){if(x.id===b.dataset.f)return x;const sub=findF(x.folders);if(sub)return sub;}return null;};
+    curF=findF(sObj.folders);if(!curF)return;
+    const items=(curF.folders&&curF.folders.length?(curF.items||[]):collectFolderItems(curF)).filter(it=>normCat(it.type||'mcq')===b.dataset.c);
+    let ok=0, wrong=0, skip=0;
+    items.forEach((it,qi)=>{
+      const sel=ui.sqAns[qi], isMcq=(normCat(it.type||'mcq')==='mcq'), corr=isMcq?it.a:(it.tick!==false?1:0);
+      if(sel===undefined)skip++;else if(sel===corr){ok++;S.studied[p.cls+'|'+sObj.id+'|'+curF.id+'|'+qi]=1;}else wrong++;
+    });
+    const pts=ok;
+    S.attempts=S.attempts||[];
+    S.attempts.push({n:S.attempts.length+1,cls:p.cls,subj:sObj.name,chapter:curF.name,score:ok,total:items.length,netPts:pts,d:dk(),secs:0});
+    save();syncToServer(true);
+    ui.sqRes={ok,wrong,skip,total:items.length,pts,showAnalysis:false};
+    return render();
+  }
   if(a==='backcat'){awardStudyTime();ui.cat=null;ui.open=null;ui.qOpenAt=0;return render()}
     if(a==='backfolder'){if(b.dataset.finish){ui.payState=null;return render();}if(ui.subPath&&ui.subPath.length){ui.subPath.pop();return render();}ui.folder=null;ui.subPath=[];ui.cat=null;ui.open=null;ui.payState=null;ui.payStep=0;return render()}
   if(a==='startpay'){ui.payStep=1;return render()}
