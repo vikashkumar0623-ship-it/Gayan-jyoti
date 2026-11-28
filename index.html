@@ -244,6 +244,8 @@ section{display:flex;flex-direction:column;gap:12px;min-width:0}
 .grid.cv{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .cover{position:relative;display:flex;flex-direction:column;justify-content:space-between;text-align:left;aspect-ratio:1/1.12;max-width:100%;border:0;border-radius:26px;padding:12px 12px 12px 14px;color:#fff;background:linear-gradient(135deg,#2563EB 0%,#3B82F6 45%,#F97316 100%);overflow:hidden;box-shadow:0 5px 0 rgba(0,0,0,.22);min-width:0}
 .cover::after,.sj::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,#1E3A8A 0%,#1D4ED8 45%,#C2410C 100%);clip-path:inset(calc(100% - var(--p)) 0 0 0);transition:clip-path .4s ease;pointer-events:none;z-index:0}
+.cover.has-img::after,.sj.has-img::after{display:none}
+.cover.has-img .ti,.cover.has-img .ft,.sj.has-img h2,.sj.has-img .ft{text-shadow:0 2px 6px rgba(0,0,0,.9)}
 .cover>*,.sj>*{z-index:1}
 .cover:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(0,0,0,.22)}
 .cover .mo{position:absolute;top:10px;right:10px;width:50px;height:50px;border-radius:18px;background:rgba(255,255,255,.22);display:grid;place-items:center}
@@ -287,6 +289,9 @@ section{display:flex;flex-direction:column;gap:12px;min-width:0}
 .opt.sel i{background:var(--primary);color:var(--on-primary)}
 .actbar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:2px solid var(--line);padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 .actbar .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:1fr 1.6fr;gap:10px}
+@keyframes batchScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.batch-track{display:flex;gap:8px;width:max-content;animation:batchScroll 24s linear infinite}
+.batch-track:hover,.batch-track:active{animation-play-state:paused}
 .btn[disabled]{opacity:.45;box-shadow:none;cursor:not-allowed}
 .mdl{position:fixed;inset:0;z-index:20;background:rgba(20,17,43,.6);display:grid;place-items:center;padding:16px}
 .mc{background:var(--surface);border:2px solid var(--line);border-radius:26px;padding:20px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:12px}
@@ -1008,11 +1013,12 @@ function viewHome(){
   return `<section class="hero"><div class="hr">${avatar(p)}<div style="min-width:0"><p class="hi">Hello,</p><h2>${esc(p.name)}</h2><p class="sub">Class ${p.cls} · ${BOARDS[p.board]} · ${esc(p.block)}, ${esc(p.dist)}</p></div></div>
    <div class="hs num"><div class="t1">${ic('star')}<b>${myPts()}</b><span>Points</span></div><div class="t2">${ic('flame')}<b>${streak()}</b><span>Day streak</span></div><div class="t3">${ic('target')}<b>${S.attempts.length}</b><span>Attempts</span></div><div class="t4">${ic('book')}<b>${studiedN}</b><span>Questions read</span></div></div></section>
   ${(()=>{
-    const bList=(typeof allCoursesList==='function'?allCoursesList(p.board):[]).filter(c=>+c.cls===+p.cls);
-    const showList=bList.length?bList:(typeof allCoursesList==='function'?allCoursesList(p.board).slice(0,4):[]);
+    const allB=(typeof allCoursesList==='function'?allCoursesList(p.board):[]);
+    const showList=[...allB.filter(c=>+c.cls===+p.cls),...allB.filter(c=>+c.cls!==+p.cls)];
     if(!showList.length)return '';
+    const dur=Math.max(20,showList.length*4)+'s';
     const chips=showList.map(c=>`<button type="button" data-act="openbatch" data-v="${esc(c.id)}" style="flex:none;background:linear-gradient(135deg,#1D4ED8,#0EA5E9);color:#fff;border:0;border-radius:12px;padding:7px 12px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">🚀 ${esc(c.title)} · ${c.paid?'₹'+c.price:'Free'} ›</button>`).join('');
-    return `<section><div class="card" style="padding:8px 10px;overflow:hidden;border-color:#0EA5E9;background:var(--soft)"><div style="font-size:.72rem;font-weight:800;color:var(--primary);margin-bottom:5px">🔥 NEW LAUNCHED BATCHES (Tap to View)</div><div style="overflow:hidden;width:100%"><div style="display:flex;gap:8px;width:max-content;animation:batchScroll 18s linear infinite">${chips}${chips}</div></div></div></section>`;
+    return `<section><div class="card" style="padding:8px 10px;overflow:hidden;border-color:#0EA5E9;background:var(--soft)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px"><span style="font-size:.72rem;font-weight:800;color:var(--primary)">🔥 NEW LAUNCHED BATCHES (Tap to View)</span><button type="button" class="link" style="font-size:.72rem;padding:0" data-act="openbatch">All Courses ›</button></div><div style="overflow:hidden;width:100%"><div class="batch-track" style="animation-duration:${dur}">${chips}${chips}</div></div></div></section>`;
   })()}
   ${stairsHTML(p,pending)}
   <section><h3>Your school</h3>
@@ -1084,7 +1090,7 @@ const EXTRA_BANK={
     ]
   }
 };
-function normCat(t){if(t==='tick')return 'tick';if(t==='short'||t==='oneliner')return 'short';if(t==='theory')return 'theory';if(t==='long'||t==='book')return 'long';if(t==='video')return 'video';if(t==='match')return 'match';if(t==='pdf')return 'pdf';return 'mcq';}
+function normCat(t){if(t==='tick')return 'tick';if(t==='short'||t==='oneliner')return 'short';if(t==='theory')return 'theory';if(t==='long'||t==='book')return 'long';if(t==='video')return 'video';if(t==='match')return 'match';if(t==='pdf')return 'pdf';if(t==='img')return 'img';return 'mcq';}
 function ytEmbedUrl(u){
   const m=String(u||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{6,})/);
   return m?('https://www.youtube-nocookie.com/embed/'+m[1]+'?rel=0&modestbranding=1&iv_load_policy=3&playsinline=1'):null;
@@ -1199,8 +1205,8 @@ function viewStudy(){
       if(!s.isAdm&&!s.cover){
         return `<button class="cover" style="--p:${pct}%" data-act="subj" data-v="${esc(s.id)}"><span class="mo" aria-hidden="true">${subjIcon(s.raw)}</span><span class="bd">${BOARDS[p.board]} · Class ${cls}</span><span class="ti">${esc(s.name)}</span><span class="ft num">${read===allItems.length?'✓ Completed':read+'/'+allItems.length+' read'}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
       }
-      const bgStyle=s.cover?`background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${s.cover}) center/cover no-repeat;--p:${pct}%`:`--p:${pct}%`;
-      return `<button class="cover" style="${bgStyle}" data-act="subj" data-v="${esc(s.id)}"><span class="mo" aria-hidden="true">${s.cover?'📁':esc((s.name||'S')[0])}</span><span class="bd">${s.folders.length} chapters</span><span class="ti">${esc(s.name)}</span><span class="ft num">${allItems.length?read+'/'+allItems.length+' read':'Empty'}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
+      const bgStyle=s.cover?`background:url(${s.cover}) center/cover no-repeat;--p:${pct}%`:`--p:${pct}%`;
+      return `<button class="cover${s.cover?' has-img':''}" style="${bgStyle}" data-act="subj" data-v="${esc(s.id)}"><span class="mo" aria-hidden="true">${s.cover?'📁':esc((s.name||'S')[0])}</span><span class="bd">${s.folders.length} chapters</span><span class="ti">${esc(s.name)}</span><span class="ft num">${allItems.length?read+'/'+allItems.length+' read':'Empty'}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
     }).join('')}</div>`:`<div class="card" style="text-align:center;padding:24px 16px"><h3 style="margin-bottom:4px">⏳ Coming Soon</h3><p class="muted small">Class ${cls} (${BOARDS[p.board]}) ke subjects jald hi aane wale hain.</p></div>`}</section>`;
   }
 
@@ -1229,8 +1235,8 @@ function viewStudy(){
       const locked=!!fl.paid&&!isUnlocked(fl.id);
       const read=items.filter((_,i)=>S.studied[cls+'|'+s.id+'|'+fl.id+'|'+i]).length;
       const pct=locked?0:(items.length?Math.round(read/total*100):0);
-      const bgStyle=fl.cover?`background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${fl.cover}) center/cover no-repeat;--p:${pct}%`:`--p:${pct}%`;
-      return `<button class="cover" style="${bgStyle}" data-act="folder" data-v="${esc(fl.id)}"><span class="mo" aria-hidden="true">${locked?'🔒':'📁'}</span><span class="bd">${locked?'Paid · ₹'+(fl.price||99):'Free'}</span><span class="ti">${esc(fl.name)}</span><span class="ft num">${locked?'Tap to Unlock':(items.length?read+'/'+items.length+' read':'Empty')}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
+      const bgStyle=fl.cover?`background:url(${fl.cover}) center/cover no-repeat;--p:${pct}%`:`--p:${pct}%`;
+      return `<button class="cover${fl.cover?' has-img':''}" style="${bgStyle}" data-act="folder" data-v="${esc(fl.id)}"><span class="mo" aria-hidden="true">${locked?'🔒':'📁'}</span><span class="bd">${locked?'Paid · ₹'+(fl.price||99):'Free'}</span><span class="ti">${esc(fl.name)}</span><span class="ft num">${locked?'Tap to Unlock':(items.length?read+'/'+items.length+' read':'Empty')}<span class="pbar"><i style="width:${pct}%"></i></span></span></button>`;
     }).join('')||`<p class="muted">No chapters added for ${esc(bkObj.name)} yet.</p>`}</div></section>`;
   }
 
@@ -1247,8 +1253,8 @@ function viewStudy(){
 
   if(!ui.cat){
     const subHtml=subFlds.length?`<section><div class="grid cv">${subFlds.map(sf=>{
-      const cnt=collectFolderItems(sf).length, bg=sf.cover?`background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${sf.cover}) center/cover no-repeat`:'';
-      return `<button class="cover" style="${bg}" data-act="opensub" data-v="${esc(sf.id)}"><span class="mo" aria-hidden="true">📁</span><span class="bd">${esc(curFl.name)}</span><span class="ti">${esc(sf.name)}</span><span class="ft num">${cnt} items${(sf.folders||[]).length?' · '+(sf.folders||[]).length+' folders':''}</span></button>`;
+      const cnt=collectFolderItems(sf).length, bg=sf.cover?`background:url(${sf.cover}) center/cover no-repeat`:'';
+      return `<button class="cover${sf.cover?' has-img':''}" style="${bg}" data-act="opensub" data-v="${esc(sf.id)}"><span class="mo" aria-hidden="true">📁</span><span class="bd">${esc(curFl.name)}</span><span class="ti">${esc(sf.name)}</span><span class="ft num">${cnt} items${(sf.folders||[]).length?' · '+(sf.folders||[]).length+' folders':''}</span></button>`;
     }).join('')}</div></section>`:'';
     const allItems=subFlds.length?(curFl.items||[]):collectFolderItems(curFl);
     const catHtml=(!subFlds.length||allItems.length)?`<section><div class="grid cv">${CATS.filter(c=>(!ADM||!ADM.uiControls||!ADM.uiControls.cats||ADM.uiControls.cats[c.id]!==false)&&!(curFl.hiddenCats&&curFl.hiddenCats[c.id])).map(c=>{
@@ -1287,7 +1293,7 @@ function viewStudy(){
   const hi=(ui.lang!=='en'&&!isLangLocked(s.raw||s.id||s.name));
   const L=(en,h)=>hi?h:en;
   return `<div class="sjw${ui.anim?' anim':''}" style="--p:${pct}%;padding-bottom:88px"><section><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="link" data-act="backcat">‹ ${esc(fl.name)} ${L('folders','फ़ोल्डर')}</button>${!isLangLocked(s.raw||s.id||s.name)?`<button class="pill" style="cursor:pointer;border-color:var(--primary);color:var(--primary)" data-act="togglelang">🌐 ${ui.lang==='en'?'English':'हिन्दी'}</button>`:''}</div>
-  <div class="sj" ${fl.cover?`style="background:linear-gradient(to top,rgba(20,17,43,.85),rgba(20,17,43,.35)),url(${fl.cover}) center/cover no-repeat"`:''}><span class="wm" aria-hidden="true" style="font-size:4.5rem">${catObj.icon}</span><span class="bd">${esc(s.name)} · ${esc(bkObj.name)} · ${esc(fl.name)}</span><h2>${esc(catObj.name)}</h2><span class="ft num">${catItems.length?readN+'/'+catItems.length+' read':'0 items'}<span class="pbar"><i style="width:${pct}%"></i></span></span></div></section>
+  <div class="sj${fl.cover?' has-img':''}" ${fl.cover?`style="background:url(${fl.cover}) center/cover no-repeat"`:''}><span class="wm" aria-hidden="true" style="font-size:4.5rem">${catObj.icon}</span><span class="bd">${esc(s.name)} · ${esc(bkObj.name)} · ${esc(fl.name)}</span><h2>${esc(catObj.name)}</h2><span class="ft num">${catItems.length?readN+'/'+catItems.length+' read':'0 items'}<span class="pbar"><i style="width:${pct}%"></i></span></span></div></section>
   ${(()=>{
     if((catObj.id==='mcq'||catObj.id==='tick')&&catItems.length){
       const res=ui.sqRes;
@@ -1309,12 +1315,28 @@ function viewStudy(){
       const modalHtml=(res&&!res.showAnalysis)?`<div style="position:fixed;inset:0;z-index:999;background:rgba(15,31,75,.65);display:flex;align-items:center;justify-content:center;padding:18px" role="dialog" aria-modal="true"><div class="card pay-ok" style="max-width:340px;width:100%;box-shadow:0 18px 40px rgba(0,0,0,.35)"><div class="pay-chk" style="width:58px;height:58px;font-size:1.8rem">🎉</div><h2>${L('Test Submitted!','टेस्ट सबमिट हो गया!')}</h2><p class="muted">${L('Score','स्कोर')}: <b>${res.ok} / ${res.total}</b> · ${L('Points','अंक')}: <b style="color:var(--good)">+${res.pts} pts</b></p><div class="ok-note" style="width:100%;display:flex;justify-content:space-around"><span>✓ ${L('Right','सही')}: <b>${res.ok}</b></span><span>✗ ${L('Wrong','गलत')}: <b>${res.wrong}</b></span><span>⏭ ${L('Skip','छोड़े')}: <b>${res.skip}</b></span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%"><button class="btn ghost" data-act="sqok">${L('OK','ठीक है')}</button><button class="btn" data-act="sqanalysis">${L('Analysis ›','विश्लेषण ›')}</button></div></div></div>`:'';
       return `<section><div class="q" style="gap:10px">
        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill">${L('Q','प्रश्न')} ${qi+1} / ${catItems.length}</span>${it.page?`<span class="pill off">${L('Page','पेज')}: ${esc(it.page)}</span>`:''}</div>
-       <p style="font-size:1.02rem"><b>${esc(trText(it.q,ui.lang))}</b></p>
+       ${it.q?`<p style="font-size:1.02rem"><b>${esc(trText(it.q,ui.lang))}</b></p>`:""}${it.img?`<img src="${esc(it.img)}" alt="Question image" style="width:100%;max-height:240px;object-fit:contain;border-radius:12px;background:#fff;border:1.5px solid var(--line)">`:""}
        <div style="display:flex;flex-direction:column;gap:8px">${optsHtml}</div>
        ${isLast&&qi<catItems.length-1?`<button class="link" style="text-align:center;margin-top:4px" data-act="sqnext">${L('Continue to Q'+(qi+2)+' without submit ›','बिना सबमिट प्रश्न '+(qi+2)+' पर जाएं ›')}</button>`:''}
       </div></section>
       <div class="actbar"><div class="in"><button class="btn ghost" data-act="sqprev" ${qi<=0?'disabled':''}>${L('‹ Previous','‹ पिछला')}</button>${isLast?`<button class="btn" style="background:var(--good);box-shadow:0 3px 0 #0B5D2A" data-act="sqsubmit" data-s="${esc(s.id)}" data-f="${esc(curFl.id)}" data-c="${esc(catObj.id)}">${L('Submit Test ✓','टेस्ट सबमिट करें ✓')}</button>`:`<button class="btn" data-act="sqnext">${L('Save & Next ›','सेव और अगला ›')}</button>`}</div></div>
       ${modalHtml}`;
+    }
+    if((catObj.id==='short'||catObj.id==='long'||catObj.id==='theory'||catObj.id==='img')&&catItems.length){
+      const qi=Math.min(Math.max(0,ui.sqIdx||0),catItems.length-1);
+      const {it,idx}=catItems[qi], key=cls+'|'+s.id+'|'+fl.id+'|'+idx, isLast=(qi===catItems.length-1);
+      if(!S.studied[key]){S.studied[key]=1;S.studiedOn[key]=dk();markDay();save();}
+      const nextBtn=nextSec
+        ?`<button class="btn" data-act="nextsec" data-ncat="${nextSec.id}" data-ncname="${esc(nextSec.name)}" data-prevsec="${esc(catObj.name)}" data-chap="${esc(fl.name)}">Next · ${esc(nextSec.name)} ›</button>`
+        :(nextChap?`<button class="btn" data-act="nextchap" data-cid="${esc(nextChap.id)}" data-cname="${esc(nextChap.name)}" data-prev="${esc(fl.name)}" data-cat="Chapter Theory">Next · ${esc(nextChap.name)} ›</button>`:`<button class="btn" data-act="finishback">Completed ✓</button>`);
+      return `<section><div class="q" style="gap:10px">
+       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill">${L('Q','प्रश्न')} ${qi+1} / ${catItems.length}</span>${it.page?`<span class="pill off">${L('Page','पेज')}: ${esc(it.page)}</span>`:''}</div>
+       ${it.chapter?`<p class="small muted">${esc(it.chapter)}</p>`:''}
+       ${it.q?`<p style="font-size:1.05rem"><b>${esc(trText(it.q,ui.lang))}</b></p>`:''}
+       ${it.img?`<img src="${esc(it.img)}" alt="Study image" style="width:100%;max-height:420px;object-fit:contain;border-radius:12px;background:#fff;border:1.5px solid var(--line)">`:''}
+       ${it.ans?`<div class="one" style="white-space:pre-line"><b>Ans:</b> ${esc(trText(it.ans,ui.lang))}</div>`:''}
+      </div></section>
+      <div class="actbar"><div class="in"><button class="btn ghost" data-act="sqprev" ${qi<=0?'disabled':''}>${L('‹ Previous','‹ पिछला')}</button>${isLast?nextBtn:`<button class="btn" data-act="sqfinishnext" data-k="${esc(key)}">Finish &amp; Next ›</button>`}</div></div>`;
     }
     return `<section>${catItems.map(({it,idx},dispIdx)=>{
     const key=cls+'|'+s.id+'|'+fl.id+'|'+idx, open=ui.open===idx, picked=ui.picked[key], read=!!S.studied[key], mt=normCat(it.type||'mcq');
@@ -1326,7 +1348,7 @@ function viewStudy(){
       inner=`${[['✓ True / सही',1],['✗ False / गलत',0]].map(([lbl,val])=>{let c='';if(picked!==undefined){if(val===corr)c='right';else if(val===picked)c='wrong';}return `<button class="opt ${c}" data-act="admopt" data-pts="1" data-k="${esc(key)}" data-o="${val}"><span>${lbl}</span></button>`;}).join('')}${picked!==undefined&&it.e?`<div class="one"><b>Note:</b> ${esc(it.e)}</div>`:''}`;
     }else if(mt==='short'){
       const nxt=catItems[dispIdx+1]?catItems[dispIdx+1].idx:-1;
-      inner=`<div class="one" style="white-space:pre-line"><b>${L('Short Answer','लघु उत्तर')} (${esc(bkObj.name)}):</b> ${esc(trText(it.ans,ui.lang))}</div>${twoBtns(nxt)}`;
+      inner=`<div class="one" style="white-space:pre-line"><b>Ans:</b> ${esc(trText(it.ans,ui.lang))}</div>${twoBtns(nxt)}`;
     }else if(mt==='match'){
       inner=`<div class="card" style="gap:8px;background:var(--soft)"><div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px 10px;align-items:center;font-size:.92rem">${(it.pairs||[]).map((pr,idx)=>`<div style="background:#fff;padding:7px 9px;border-radius:10px;border:1.5px solid var(--line);font-weight:700">${idx+1}. ${esc(pr.l)}</div><div style="color:var(--primary);font-weight:800">→</div><div style="background:#E6F9F1;padding:7px 9px;border-radius:10px;border:1.5px solid var(--good);font-weight:700">${esc(pr.r)}</div>`).join('')}</div></div>`;
     }else if(mt==='pdf'){
@@ -1346,13 +1368,13 @@ function viewStudy(){
       </div>`;
     }else if(mt==='theory'){
       const nxt=catItems[dispIdx+1]?catItems[dispIdx+1].idx:-1;
-      inner=`<div class="one" style="white-space:pre-line"><b>${L('Chapter Theory','अध्याय सिद्धांत')}:</b>\n${esc(trText(it.ans,ui.lang))}</div>${twoBtns(nxt)}`;
+      inner=`<div class="one" style="white-space:pre-line"><b>Ans:</b>\n${esc(trText(it.ans,ui.lang))}</div>${twoBtns(nxt)}`;
     }else{
       const nxt=catItems[dispIdx+1]?catItems[dispIdx+1].idx:-1;
       inner=`${it.chapter?`<p class="small muted">${esc(it.chapter)}</p>`:''}<div class="one" style="white-space:pre-line"><b>Long Answer (${esc(bkObj.name)}):</b>
 ${esc(it.ans)}</div>${twoBtns(nxt)}`;
     }
-    return `<div class="q ${read?'read':''}" style="--i:${dispIdx}"><button class="head" data-act="q" data-v="${idx}" aria-expanded="${open}"><span class="no num">${read?'✓':dispIdx+1}</span><span class="qt">${esc(trText(it.q,ui.lang))}${it.page?`<small class="muted" style="display:block;font-weight:600">${L('Page','पेज')}: ${esc(it.page)}</small>`:''}</span></button>${open?`<div class="body">${inner}</div>`:''}</div>`;
+    return `<div class="q ${read?'read':''}" style="--i:${dispIdx}"><button class="head" data-act="q" data-v="${idx}" aria-expanded="${open}"><span class="no num">${read?'✓':dispIdx+1}</span><span class="qt">${esc(it.q?trText(it.q,ui.lang):"🖼️ Image")}${it.page?`<small class="muted" style="display:block;font-weight:600">${L('Page','पेज')}: ${esc(it.page)}</small>`:''}</span></button>${open?`<div class="body">${it.img?`<img src="${esc(it.img)}" alt="Item image" style="width:100%;max-height:260px;object-fit:contain;border-radius:12px;background:#fff;border:1.5px solid var(--line);margin-bottom:8px">`:''}${inner}</div>`:''}</div>`;
   }).join('')||`<p class="muted">No ${esc(catObj.name)} items in ${esc(fl.name)} (${esc(bkObj.name)}) yet.</p>`}</section>
   <div class="actbar"><div class="in"><button class="btn ghost" data-act="backcat">‹ Folders</button>${nextSec?`<button class="btn" data-act="nextsec" data-ncat="${nextSec.id}" data-ncname="${esc(nextSec.name)}" data-prevsec="${esc(catObj.name)}" data-chap="${esc(fl.name)}">Next · ${esc(nextSec.name)} ›</button>`:(nextChap?`<button class="btn" data-act="nextchap" data-cid="${esc(nextChap.id)}" data-cname="${esc(nextChap.name)}" data-prev="${esc(fl.name)}" data-cat="Chapter Theory">Next · ${esc(nextChap.name)} ›</button>`:`<button class="btn" data-act="backcat">Completed ✓</button>`)}</div></div>`;})()}</div>${ui.chapPopup?`<div class="mdl" role="dialog" aria-modal="true"><div class="mc" style="text-align:center"><div style="font-size:2rem">🎉</div><h3>Thank You!</h3><p class="small"><b>${esc(ui.chapPopup.prevTitle)}</b> complete karne ke liye dhanyawad!</p><p class="small">Ab aap <b>${esc(ui.chapPopup.nextChap)}</b> ke <b>${esc(ui.chapPopup.catName)}</b> section par ja rahe hain.</p><button class="btn block" data-act="closecpop">Shuru Karein ›</button></div></div>`:''}`;
 }
@@ -1867,6 +1889,7 @@ document.addEventListener('click',e=>{
   if(a==='sqpick'){ui.sqAns=ui.sqAns||{};ui.sqAns[+b.dataset.i]=+b.dataset.o;return render()}
   if(a==='sqprev'){ui.sqIdx=Math.max(0,(ui.sqIdx||0)-1);return render()}
   if(a==='sqnext'){ui.sqIdx=(ui.sqIdx||0)+1;return render()}
+  if(a==='sqfinishnext'){const k=b.dataset.k;if(k){S.studied[k]=1;S.studiedOn[k]=dk();markDay();save();}ui.sqIdx=(ui.sqIdx||0)+1;try{window.scrollTo(0,0);}catch(ex){}return render()}
   if(a==='sqok'){ui.sqRes=null;return render()}
   if(a==='sqanalysis'){if(ui.sqRes)ui.sqRes.showAnalysis=true;return render()}
   if(a==='sqretry'){ui.sqIdx=0;ui.sqAns={};ui.sqRes=null;return render()}
@@ -1924,7 +1947,7 @@ document.addEventListener('click',e=>{
   }
   if(a==='ccls'){ui.cCls=v;return render()}
   if(a==='cmed'){ui.cMed=v;return render()}
-  if(a==='openbatch'){ui.tab='course';ui.buyCourse=v;ui.payState=null;ui.payStep=0;ui.uerr='';return render()}
+  if(a==='openbatch'){ui.tab='course';ui.buyCourse=null;ui.cCls='all';ui.cMed='all';ui.payState=null;ui.payStep=0;ui.uerr='';return render()}
   if(a==='buycourse'){ui.buyCourse=v;ui.payState=null;ui.payStep=0;ui.uerr='';return render()}
   if(a==='backcourse'){ui.buyCourse=null;ui.payState=null;ui.payStep=0;ui.uerr='';return render()}
   if(a==='autounlockc'){S.unlocked=S.unlocked||{};S.unlocked[v]=true;ui.buyCourse=null;save();return render()}
@@ -1977,7 +2000,7 @@ document.addEventListener('click',e=>{
   if(a==='nextsec'){
     awardStudyTime();
     ui.cat=b.dataset.ncat;
-    ui.open=null;ui.qOpenAt=0;
+    ui.sqIdx=0;ui.sqAns={};ui.sqRes=null;ui.open=null;ui.qOpenAt=0;
     ui.chapPopup={prevTitle:(b.dataset.chap||'Chapter')+' — '+(b.dataset.prevsec||'Section'),nextChap:b.dataset.chap||'Chapter',catName:b.dataset.ncname||'Next Section'};
     try{window.scrollTo(0,0);}catch(ex){}
     return render();
@@ -1986,7 +2009,7 @@ document.addEventListener('click',e=>{
     awardStudyTime();
     ui.folder=b.dataset.cid;
     ui.cat='theory';
-    ui.open=null;ui.qOpenAt=0;
+    ui.sqIdx=0;ui.sqAns={};ui.sqRes=null;ui.open=null;ui.qOpenAt=0;
     ui.chapPopup={prevTitle:b.dataset.prev||'Chapter',nextChap:b.dataset.cname||'Next Chapter',catName:b.dataset.cat||'Chapter Theory'};
     try{window.scrollTo(0,0);}catch(ex){}
     return render();
